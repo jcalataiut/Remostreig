@@ -1,0 +1,324 @@
+---
+title: "Bootstrap"
+author: "Jose Calatayud Mateu"
+date: "2024-03-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(readr)
+library(tidyverse)
+```
+
+
+
+## Problema 1
+
+### Estudi de la creatinina en sang
+
+*El baix pes al néixer segons gestació (SGA) és un factor de risc per a molts problemes de salut a la vida adulta. Per a tractar aquest fet, en una població de dones amb risc de patir Creixement Intrauterí Restringit (CIT), es van assignar aleatòriament a intervenció usual (control) o formació en dieta mediterrània (tractament) per a prevenir el baix pes al néixer del nadó.*
+
+En primer lloc, es procedirà a realitzar un anàl·lisis descriptiu de les dades però abans es transformaran les variables character a factor per tal de compactar el problema:
+
+```{r}
+IMPACT_examen_remostreig <- read_csv("files/IMPACT_examen_remostreig.csv")
+head(IMPACT_examen_remostreig)
+```
+
+```{r}
+IMPACT_examen_remostreig <- IMPACT_examen_remostreig %>%  mutate(across(where(is.character), ~as.factor(..1) )) 
+
+skimr::skim(IMPACT_examen_remostreig)
+```
+
+Es farà el següent contrast de boostrap:
+
+$$
+H_0: RD=0
+$$
+
+
+Mitjançant boostraping no paramètric es durà a terme l'estimació dels intervals de confiança
+
+```{r}
+taula_impact <- table(IMPACT_examen_remostreig$Randomitzacio,IMPACT_examen_remostreig$SGA_naixement)
+taula_impact
+
+SGA_control_true <- taula_impact[1,2]/sum(taula_impact[1,])
+SGA_tract_true <- taula_impact[2,2]/sum(taula_impact[2,])
+
+RD_true <- SGA_tract_true-SGA_control_true
+
+
+rep<-100000
+distrib_RD <- c()
+distrib_NNT <- c()
+
+
+for(i in 1:rep){
+  rand <- sample(IMPACT_examen_remostreig$Randomitzacio,size=length(IMPACT_examen_remostreig$Randomitzacio), replace=TRUE)
+  
+  taula_impact <- table(rand,IMPACT_examen_remostreig$SGA_naixement)
+  taula_impact
+  
+  SGA_control <- taula_impact[1,2]/sum(taula_impact[1,])
+  SGA_tract <- taula_impact[2,2]/sum(taula_impact[2,])
+  
+  RD <- SGA_tract-SGA_control
+  NNT <- 1/abs(RD)
+  
+  distrib_RD <- c(distrib_RD, RD)
+  distrib_NNT <- c(distrib_NNT, NNT)
+}
+
+IC_RD <- quantile(distrib_RD, probs = c(0.025, 0.975)); IC_RD
+IC_NNT <- quantile(distrib_NNT, probs = c(0.025, 0.975)); IC_NNT
+
+
+
+```
+
+Però, el problema demanava que es realitzara un tipus de remostreig amb boostraping paramètric, llavors es procedeix a realitzar-ho asumint que la variable SGA_naixement en distribueix en cadascún del grups randomització com una variable binomial amb probabilitat d'exit l' obtinguda de la mostra.
+
+
+```{r}
+taula_impact <- table(IMPACT_examen_remostreig$Randomitzacio,IMPACT_examen_remostreig$SGA_naixement)
+taula_impact
+
+SGA_control_true <- taula_impact[1,2]/sum(taula_impact[1,])
+SGA_tract_true <- taula_impact[2,2]/sum(taula_impact[2,])
+
+RD_true <- SGA_tract_true-SGA_control_true
+
+
+rep<-1000
+
+sim_SGA_control <- rbinom(rep, sum(taula_impact[1,]), SGA_control_true)/ sum(taula_impact[1,])
+sim_SGA_tract <- rbinom(rep, sum(taula_impact[2,]), SGA_tract_true)/ sum(taula_impact[2,])
+
+stat_RD <- sim_SGA_tract-sim_SGA_control
+stat_NNT <- 1/abs(stat_RD)
+
+quantile(stat_RD, probs = c(0.025, 0.975))   #significatiu que ja no conté el 0
+quantile(stat_NNT, probs = c(0.025, 0.975))
+```
+```{r}
+par(mfrow=c(1,2))
+hist(stat_RD, col="green", main="RD")
+hist(stat_NNT, col="green", main="NNT")
+```
+
+## Problema 2
+
+*La creatinina de la sang és un indicador important de la salut renal dels pacients. Volem estudiar diferents aspectes d’aquesta molècula, entre ells, si pot estar associada a problemes cardíacs*
+
+
+Disposem d’una base de dades amb les següents variables:
+
+```{r}
+library(foreign)
+dades <- read.spss('files/CREA.sav', use.value.labels = TRUE, to.data.frame = TRUE)
+head(dades)
+```
+
+_1. Feu una descripció global de la mostra. Feu un gràfic de la variable creatinina._
+
+```{r}
+skimr::skim(dades)
+hist(dades$CREA)
+```
+
+_2. Doneu l’estimació amb bootstrap no-paramètric del IC 95% per a la mediana de la creatinina (amb quantils i amb l’aproximació per la normal) i calculeu el seu biaix._
+
+
+```{r}
+rep<-10000
+mediana_true <- median(dades$CREA)
+distrib_mediana <- numeric(rep)
+
+for(i in 1:rep){
+  rand <- sample(dades$CREA,size=length(dades$CREA), replace=TRUE)
+  
+  stadistic <- median(rand)
+  
+  distrib_mediana[i] <-  stadistic
+  
+}
+
+ci_quantils <- quantile(distrib_mediana, probs = c(0.025, 0.975))
+
+mitja_mostral <- mean(distrib_mediana)
+error <- sd(distrib_mediana)
+
+ci_normal <- mitja_mostral + 1.96*c(-1,1)*error
+
+ci_quantils
+ci_normal
+
+hist(distrib_mediana)
+```
+
+_3. Existeix relació entre la creatinina en sang i el sexe de l’individu? Feu un t-test i ajusteu un model lineal. Comenteu els resultats._
+
+
+```{r}
+t.test(CREA~SEXE, data=dades)
+
+model <- glm(CREA~SEXE,data=dades)
+summary(model)
+```
+
+Els dos valors tenen que donar el mateix pero no dona igual, això es perque el model té l'assumció de igualtat de variàncies, per defecte. El t.test es un test més conservador (més potent de rebutjar la hipótesi nul·la). En canvi, si assumir en el t.test que present variaàncies igual, deuria de donar el mateix resultat que en glm:
+
+
+```{r}
+t.test(CREA~SEXE, data=dades, var.equal=TRUE)
+
+model <- glm(CREA~SEXE,data=dades)
+summary(model)
+```
+Dona el mateix llevat del signe però això es indiferent ja que la distribució de la t-Student es simètrica i son resultats equivalent en valor absolut.
+
+D'acord amb els resultats, s'observa que sí que existeis una relació significativa entre la creatinina en sang i el sexe del individu, amb una confiança del $95\%$.
+
+_4. Volem veure si és possible predir el valor de la creatinina en sang en funció de l’edat. Ajusteu un model lineal i feu la seva validació._
+
+```{r}
+model2 <- lm(CREA~EDAT, data=dades)
+m <- summary(model2); m
+```
+
+
+Procedim a la validació del model de forma gràfica amb les gràfiques dels residus:
+
+```{r}
+par(mfrow=c(2,3))
+plot(model2, 1:6)
+```
+
+A partir dels resultat, sembla que els residus s'ajusten prou bé ja que la linea que genera el primer gràfic residuals vs. fitted es presenta estable entorn al zero i el mateix per la variancia dels residus que semblen ser homocedastics per cadascún d'ells, en canvi la normalitat del mateixos es posa en dubte degut a que presenta cues pesades que es desvien de la normalitat.
+
+_5. Doneu un interval de confiança del 95% per al coeficient $R^2$ de la regressió de l’apartat anterior mitjançant bootstrap paramètric. És possible predir bé els valors de creatinina en sang?_
+
+El boostrap paramètric, com el de tot model, es deu de fer sobre els residus o sobre la resposta dels mateixos ja que es sobre aquestos en els que es basen les supocisions de Gauss-Markov. Per això era important fer la validació del model, ja que si els residus no cumpleixen les suposicions de Gauss-Markov, el boostraping no tindria sentit ja que es basa en que aquestes supocisions son certes. 
+
+```{r}
+rep <- 1000
+n <- length(dades$CREA)
+R2 <- numeric(rep)
+
+
+for(i in 1:rep){
+ error <- rnorm(n, 0, m$sigma)
+ rCREA <- model2$coefficient[1] + model2$coefficient[2]*dades$EDAT + error
+ model_boot <- lm(rCREA ~ dades$EDAT)
+ model_boot_summary <- summary(model_boot)
+ R2[i] <- model_boot_summary$r.squared
+}
+
+
+quantile(R2, probs = c(0.025, 0.5, 0.975)) # significatiu
+hist(R2, col="blue", main = "R2")
+```
+
+Els resultats del boostraping dona un valor semblan l'estimació del model del $R^2$, en canvi, respondre a la pregunta de si es possible predir bé els valor de la creatinina en sang en funció de l'edat es deuria de valor el que significa predir bé, ja que l'ajust de la creatinina en funció de l'edat és dolent de per si degut a que presenta un ajust molt feble.
+
+
+_6. Es considera que un cert grau d’insuficiència renal és a partir d’una creatinina superior a 1,5 mg/dL. Volem estudiar si existeix relació entre aquests nivells de creatinina i el tipus de cardiopatía que pateix el pacient. Quin model podem ajustar? Definiu el contrast d’hipòtesi que realitzeu i calculeu la magnitud de l’efecte amb el model ajustat. Quina és la conclusió? Feu servir la següent funció (cal que construïu la funció coefficient-logisitic):_
+
+
+Llavors, el que es vol estudiar es si el pacient presenta o no insuficiència renal en funció del tipus de cardiopatia. Aleshores es tracta de modelitzar una variable dicotòmica en funció d'una regressora (que en aquest cas es factor amb dos nivells). El model més apropiat és el model logístic i el que es vol veure es si el coeficient de la regressora és o no significatiu.
+
+Aleshores, el contrast que es preten estudiar és el següent, tenint en compte que $\eta=\beta_0 + \beta_1 \cdot \text{Cardiopatia}$ és el predictor lineal que té;
+
+$$
+H_0: \beta_1 = 0 
+$$
+O de forma anàloga, es podria posar com a hipòtesi que el oddsratio entre els diferents grups fos 1, ie;
+
+$$
+H_0: \text{OR}=1
+$$
+Però observa que aquestes dues hipòtesis son totalement equivalents, ja que $\exp(\beta_1)= \text{OR}$ i com que $\exp(0)=1$ trivialment s'observa l'equivalència.
+
+
+```{r}
+library(boot)
+dades$RENAL <- cut(dades$CREA, 1.5, breaks = c(min(dades$CREA), 1.5, max(dades$CREA)), labels=c("NO_INSU","INSU"))
+
+glm(RENAL~CARDIOPATIA, data = dades, family = binomial(link = "logit"))
+
+coeficient_logistic <- function(dades, indices){
+  model <- glm(RENAL~CARDIOPATIA, data = dades, family = binomial(link = "logit"))
+  return(model$coefficients %>% tail(1)) 
+}
+
+param_boot_sim <- boot(data=dades, statistic = coeficient_logistic, R= 1000)
+
+param_boot_sim
+
+```
+
+
+## Problema 3 
+
+### El mètode bootstrap en regressió no lineal
+
+*Aquestes dades són el resultat d’un estudi de la NIST que implica investigació dental en adsorció monomolecular. La variable de resposta és el volum i la variable predictiva és la pressió. Podem ajustar aquest conjunt de dades mitjançant el model de regressió no lineal:* $y = b_1(1 − e^{−b_2x})$
+
+```{r}
+x <- c(77.6,114.9,141.1,190.8,239.9,289,332.8,378.4,434.8,477.3,536.8,593.1,689.1,760)
+y <- c(10.07,14.73,17.94,23.93,29.61,35.18,40.02,44.82,50.76,55.05,61.01,66.4,75.47,81.78)
+```
+
+En el modelatge d'un model de regressió no lineal cal inicialitzar els parametres per que comence la cerca del óptim. Tal i com a realitzat el professor, proposen com valors inicial $b_1=2; b_2=0.001$.
+
+```{r}
+mnl <- nls(y ~ b1 - b1 * exp( -b2 * x) , start = list(b1=2,b2=0.001))
+
+summary(mnl)
+```
+
+La sortida mostrada per pantalla del model no lineal indica tots els coeficients estimats son significatius i la convergència es dona en un nombre petit d'iteracions.
+
+
+_2. Calculeu l’interval de confiança del_ $95\%$ _de la predicció per x = 900. Feu l’histograma de la distribució, què observeu?_
+
+Per calcular el interval de confiança per a una predicció d'un model no lineal, caldrà fer bootstraping no-paramètric (si fora parametric es tindria que coneixer les suposicions sobre la distribució dels errors del model de regressió no lineal, que no tenen perque ser les mateix que en el model lineal, en el que sí que les coneguem degut a les condicions de Gauss-Markov)
+
+Quan fem bootstraping, el que voldriem en cada iteració és generar remostres de la mateix longitud que la mostra original amb reemplaçament.
+
+Endemés, fixeu-vos que el valor x=900 se'n surt fora del rang de valors del modelatge, aleshores la predicció per construcció serà molt dolenta. De forma teòrica aquest interval correspon a:
+
+```{r}
+newdata <- data.frame(x=900)
+pred_true <- predict(mnl, newdata = newdata)
+pred_true
+```
+Veiem el que el càlcul teòric del interval de confiança no es pot obtindre ja que la funció predict quan el objecte és un ajust nonlinear least squared ignora l'argument. Per tant, el objectiu serà fer-ho per bootstraping
+
+```{r}
+rep <- 1000
+n <- length(x)
+pred <- numeric(rep)
+newdata <- data.frame(x_aux=900)
+
+for(i in 1:rep){
+ index <- sample(1:n, size = n, replace=TRUE)
+ x_aux <- x[index]
+ y_aux <- y[index]
+ mnl_aux <- nls(y_aux ~ b1 - b1 * exp( -b2 * x_aux) , start = list(b1=2,b2=0.001))
+
+ pred[i] <- predict(mnl_aux, newdata = newdata)
+}
+
+
+quantile(pred, probs = c(0.025, 0.5, 0.975))
+hist(pred, col="blue", main = "pred")
+```
+
+Que la estimació de bootstraping és similar a la estimació del model original i que les dades es concentren en torne a l'estimació i el interval sembla coherent.

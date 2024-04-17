@@ -1,0 +1,135 @@
+---
+title: "Practica 5"
+author: "Jose Calatayud Mateu"
+date: "2024-04-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Problema 1
+
+```{r}
+x <- seq(0,25, by=0.01)
+y <- (1/(x+1))*(4*sin(x) + rnorm(n=length(x), 0, 2))
+dades_sin <- data.frame(X=x, Y=y)
+ggplot(dades_sin) + geom_point(aes(x=x, y=y), cex=2) + 
+  theme_grey(base_size=20) + ylab('f(x)')
+```
+```{r}
+library(rpart)
+model <- lm(y~x)
+summary(model)
+```
+
+```{r}
+predict_lm <- predict(model)
+
+1 - (var(y- predict_lm)/var(y))
+```
+
+
+```{r}
+ggplot(dades_sin) + geom_point(aes(x=x, y=y), cex=2) + 
+  theme_grey(base_size=20) + ylab('f(x)') + 
+  geom_abline(intercept = model$coefficients[1], slope = model$coefficients[2], linetype = 1, col="red", lwd=1)
+```
+
+```{r}
+library(rpart.plot)
+model_ar <- rpart(y~x)
+rpart.plot(model_ar, yesno=TRUE)
+```
+
+En principi discrimina per aquella variable que més o fa i dins del rang de valors, tria el mitjà
+
+```{r}
+pred_ar <- predict(model_ar, newdata = data.frame(x=x))
+
+ggplot(dades_sin) + geom_point(aes(x=x, y=y), cex=2) + 
+  theme_grey(base_size=20) + ylab('f(x)') 
+
+plot(x,y, add=TRUE, pch=16, col="black")
+lines(x, pred_ar, col="red", lwd=1)
+
+```
+
+```{r}
+1 - (var(y- pred_ar)/var(y))
+```
+## Problema 2
+
+
+```{r}
+library(ggplot2)
+mnist <- read.csv(file = "files/MNIST_train.csv")
+mnist$label <- as.factor(mnist$label)
+head(mnist)
+
+
+```
+
+```{r}
+plot_image <- function(row) {
+  photo <- data.frame(x = rep(1:28, times = 28), 
+                      y = rep(28:1, each = 28), 
+                      shade = as.numeric(mnist[row, -1]))
+  ggplot(data = photo) + 
+    geom_point(aes(x = x, y = y, color = shade), size = 11, shape = 15) +
+    scale_color_gradient(low = "white", high = "black") +
+    geom_text(aes(x = 28, y = 28), label = mnist[row, 1])
+}
+
+par(ask = TRUE)
+lapply(sample(nrow(mnist), size = 3), FUN = plot_image)
+```
+
+```{r}
+n <- length(mnist)
+rand <- sample(1:n, size = round(n/2), replace=FALSE)
+
+train <- mnist[rand,]
+test <- mnist[-rand,]
+```
+
+```{r}
+model_ac <- rpart(label ~ ., data=train, method = "class")
+plot(as.party(model_ac))
+```
+
+
+
+```{r}
+pred_ac <- predict(model_ac, newdata = test %>% dplyr::select(-label), type="class")
+conf_arbre <- table(pred_ac, test$label)
+conf_arbre
+```
+
+
+```{r}
+100*(sum(diag(conf_arbre)))/sum(conf_arbre)
+```
+
+```{r}
+library(ranger)
+randomforest_entrenament <- ranger(label~., data=train)
+```
+
+
+```{r}
+pred <- predict(randomforest_entrenament, test)$predictions
+conf_rf <- table(pred, test$label)
+conf_rf
+```
+
+```{r}
+100*(sum(diag(conf_rf)))/sum(conf_rf)
+```
+
+
+
+
+
+

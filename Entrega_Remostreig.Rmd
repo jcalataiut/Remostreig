@@ -1,0 +1,473 @@
+---
+title: "Entrega de Remostreig"
+author: "Jose Calatayud Mateu"
+date: "2024-04-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Problema 1
+
+*En uns jocs olímpics dos arquers llancen una fletxa simultàniament a una fusta quadrada d’un metre de costat situada a uns metres de distància. Si ambdós arquers sempre aconsegueixen clavar la fletxa i el primer ho fa en el punt* $(X_1, Y_1)$ *i el segon ho fa en el punt* $(X_2, Y_2)$:
+
+(a) _Simuleu observacions de la distància entre les dues fletxes, sabent que les coordenades d’impacte són variables aleatòries amb distribució_ $U(a = −0.5, b = 0.5)$ _per al primer tirador i_ $N(\mu = 0, \sigma^2 = 1)$ _per al segon (amb distribució iid). Dibuixen la distribució d’aquesta nova variable aleatòria i calculeu la seva esperança i variància empíriques._
+
+
+```{r}
+set.seed(666)
+a <- -0.5
+b <- 0.5
+
+mu <- 0
+sigma2 <- 1
+
+n <- 10000
+
+X1 <- runif(n, min= a, max = b)
+Y1 <- runif(n, min= a, max = b)
+
+
+X2<-c()
+Y2<-c()
+cont <- 0
+
+while(cont<n){
+  X2_aux <- rnorm(1, mean = mu, sd = sqrt(sigma2))
+  Y2_aux <- rnorm(1, mean = mu, sd = sqrt(sigma2))
+  
+  if(abs(X2_aux)<0.5 & abs(Y2_aux)<0.5){
+    cont <- cont +1
+    X2 <- c(X2, X2_aux)
+    Y2 <- c(Y2, Y2_aux)
+  }
+}
+
+
+plot(X1,Y1, xlim = c(-1,1), ylim = c(-1,1))
+abline(v=c(-0.5,0.5), h=c(-0.5,0.5), col="red")
+
+plot(X2,Y2, xlim = c(-1,1), ylim = c(-1,1))
+abline(v=c(-0.5,0.5), h=c(-0.5,0.5), col="red")
+```
+La media empírica:
+```{r}
+cat("L'esperança de (X1,Y1) = (", round(mean(X1),2), ",", round(mean(Y1),2),") \n")
+cat("L'esperança de (X2,Y2) = (", round(mean(X2),2), ",", round(mean(Y2),2),")")
+```
+La variància empirica:
+
+```{r}
+cat("La variància de (X1,Y1) = (", round(var(X1),2), ",", round(var(Y1),2),") \n")
+cat("La variància de (X2,Y2) = (", round(var(X2),2), ",", round(var(Y2),2),")")
+```
+(b) _Suposem que ara s’enganxa a la fusta una diana de paper circular perfectament inscrita de 0.5 metres de radi. Quina s la probabilitat d’encertar els dos dins la diana?_
+
+
+Les probabilitats dels dos arques son:
+
+```{r}
+prob_diana_1 <- sum((X1^2+Y1^2)<(0.5^2))/n
+prob_diana_2 <- sum((X2^2+Y2^2)<(0.5^2))/n
+
+prob_diana_12 <- sum(encerta_arq1==encerta_arq2 & encerta_arq1==TRUE)/n
+
+data.frame(arquer_1=prob_diana_1, arquer_2=prob_diana_2, prob_diana_12)
+```
+
+(c) _Quina és la nova distància esperada entre ambdues fletxes quan encerten dins la diana els dos arquers?_
+
+```{r}
+encerta_arq1 <- (X1^2+Y1^2)<(0.5^2)
+encerta_arq2 <- (X2^2+Y2^2)<(0.5^2)
+
+index <- which(encerta_arq1==encerta_arq2 & encerta_arq1==TRUE)
+
+data <- data.frame(X1=X1, Y1=Y1, X2=X2, Y2=Y2)
+data_encerts <- data[index,]
+
+# Calcularem la distancia euclidea entre les dues fletxes
+data_encerts <- data_encerts %>% mutate("Dist"= pmap_dbl(list(X1,Y1,X2,Y2), ~ sqrt((..1 - ..3)^2+(..2 -..4)^2)))
+
+mdist <- mean(data_encerts$Dist)
+cat("La distància euclidea esperada entre les dues fletxes quan els dos arquers encerten és", mean(mdist))
+```
+
+## Problema 2
+
+*El conjunt de dades TRC conté les dades d’un estudi1 amb 693 pacients tractats de la seva insuficiència cardíaca mitjançant l’implant en el seu cor d’un dispositiu de resincronizació.*
+
+*Un dispositiu de Resincronització Cardíaca és un dispositiu que té l’objectiu de tornar a sincronitzar les contraccions dels ventricles del cor mitjançant estimulació elèctrica artificial millorant el seu funcionament i evitant inclús morts sobtades. S’estima que uns 400.000 pacients per any es poden beneficiar de la TRC en els països europeus (i cadascun val uns 20.000 euros!)*
+
+*Les dades (que són completament reals!) contenen cinc variables que són ID, SEXE, EDAT, FAPERM, CF_IV, CREA i MORT_12m i s n en el fitxer TRC_Remostreig.sav (per importat les dades, cal la llibreria foreign, ja que les dades tenen format SPSS). Volem estudiar un seguit de característiques d’aquesta mostra...*
+
+(a) _Feu una descripció bàsica de les variables de la mostra i elimineu la variable ID (identificador de pacient) de la base de dades. Calculeu tamb l’estimació puntual i l’interval de confiança de la mediana d’edat dels pacients amb bootstrap no paramètric. Volem saber quina és la prevalença (o probabilitat) de pacients que moren durant els 12 primers mesos després de l’implant. Calculeu aquest valor i doneu un interval de confiança del_ $99\%$ _mitjançant bootstrap paramètric. Definiu quin model paramètric feu servir per al remostreig_
+
+
+```{r}
+library(foreign)
+dades <- read.spss('files/TRC_Remostreig.sav', use.value.labels = TRUE, to.data.frame = TRUE)
+head(dades)
+```
+
+Eliminem la variable ID
+
+```{r}
+dades <- dades %>% dplyr::select(-ID_PACIENT)
+head(dades)
+```
+
+Mediana d'edat dels pacients amb bootstrap no-paramètric
+
+```{r}
+rep<-10000
+mediana_true <- median(dades$EDAT)
+distrib_mediana <- numeric(rep)
+n <- length(dades$EDAT)
+
+for(i in 1:rep){
+  rand <- sample(dades$EDAT,size=n, replace=TRUE)
+  
+  stadistic <- median(rand)
+  
+  distrib_mediana[i] <-  stadistic
+  
+}
+
+ci_quantils <- quantile(distrib_mediana, probs = c(0.025, 0.5,0.975))
+
+mitja_mostral <- mean(distrib_mediana)
+error <- sd(distrib_mediana)
+
+ci_normal <- mitja_mostral + 1.96*c(-1,1)*error
+
+# Amb quantils i amb aprox per la normal
+ci_quantils
+ci_normal
+
+barplot(table(distrib_mediana))
+```
+Ara ens demanen calcular quina és la prevalència dels pacients que moren durant els 12 primers mesos després de l'implant. Pel que s' enten, la mostra que estem tractant son tots pacients que s'han mort o no durant els primers 12 mesos ja que no tenim cap variable temps després de l'operació que ens ho indique. Al tractar-se d'una probabilitat (prevalència) sobre el conjunt de persones transplantades en els 12 primers mesos, sembla correcte utilitzar com a distribució de probabilitat per la variable MORT_12m la distribució binomial amb paràmetres, n com a longuitud de la mostra i p com a la probalitat mostral de que un persona es mori en els 12 primers mesos del transplant.
+
+```{r}
+n <- length(dades$MORT_12m)
+p_true <- prop.table(table(dades$MORT_12m))["SI"]
+
+rep<-10000
+
+sim_binom <- rbinom(rep, n, p_true)
+
+stat <- sim_binom/n
+
+p_true
+mean(stat)
+
+quantile(stat, probs = c(0.025, 0.975))   #significatiu que ja no conté el 0
+```
+
+(b) _Volem saber la mitjana de creatinina d’aquesta població. Feu una estimació amb el mètode de Jackknife i també amb bootstrap no paramètric. Què observeu? Es defineix que un cert pacient té insuficiència renal (IR) si té un valor de creatinina superior a 1,3 mg/dL. Quants pacients tenen IR i quin percentatge són? Feu el mateix càlcul segons si el pacient ha sigut diagnosticat de Fibrail·lació Auricular (FAPERM) o no (com a perfils fila)._
+
+Mitjana amb mètode Jackknife
+
+```{r}
+theta<- mean(dades$CREA)
+n<- length(dades$CREA)
+
+thetai <- pseudov <- numeric(n)
+dim(thetai) <- dim(pseudov) <- c(n, 1)
+
+for(j in 1:n){
+  dades_new <- dades$CREA[-j]
+  thetai[j] <- mean(dades_new)
+  pseudov[j,] <- n*theta-(n-1)*thetai[j]
+}
+
+estim_jack <- apply(pseudov, MARGIN = 2, FUN=mean) %>% as.matrix(ncol=1) 
+sd_jack <-  apply(pseudov, MARGIN = 2, FUN=sd) %>% as.matrix(ncol=1) 
+
+ci_jack <- cbind(estim_jack, estim_jack) + 1.96 * matrix(c(-1,1), ncol=2, byrow=TRUE) * cbind(sd_jack,sd_jack)/sqrt(n)
+
+matriu <- cbind(estim_jack,ci_jack)
+colnames(matriu) <- c("estimates", "lower", "upper")
+rownames(matriu) <- c("mitjana")
+print(matriu)
+```
+Mitjana amb bootstrap non-paramètric
+
+```{r}
+rep<-10000
+mitjana_true <- mean(dades$CREA)
+distrib_mitjana <- numeric(rep)
+n <- length(dades$CREA)
+
+for(i in 1:rep){
+  rand <- sample(dades$CREA, size=n, replace=TRUE)
+  
+  stadistic <- mean(rand)
+  
+  distrib_mitjana[i] <-  stadistic
+  
+}
+
+ci_quantils <- c(mean(distrib_mitjana),quantile(distrib_mitjana, probs = c(0.025,0.975)))
+ci_quantils
+
+hist(distrib_mitjana)
+```
+Insuficiència renal 
+
+```{r}
+dades$IR <- cut(dades$CREA, breaks = c(min(dades$CREA), 1.3, max(dades$CREA)), labels=c("NO","SI"), include.lowest = TRUE)
+IRsi_n <- table(dades$IR)["SI"]
+IRsi_prop <- prop.table(table(dades$IR))["SI"]
+
+FAPERMsi_n <- table(dades$FAPERM)["SI"]
+FAPERMsi_prop <- prop.table(table(dades$FAPERM))["SI"]
+
+FAPERMno_n <- table(dades$FAPERM)["NO"]
+FAPERMno_prop <- prop.table(table(dades$FAPERM))["NO"]
+
+df <- data.frame(n=c(IRsi_n,FAPERMsi_n, FAPERMno_n), percentatge=c(IRsi_prop, FAPERMsi_prop, FAPERMno_prop)*100)
+rownames(df) <- c("IR=si", "FAPERM=si", "FAPERM=no")
+df
+```
+
+
+(c) _Ara volem estudiar si el fet de tenir Classe Funcional 4 (CF_IV) és un factor associat a la mortalitat. Feu la taula de contingència per estudiar aquest fenomen i calculeu tamb els percentatges de mortalitat segons cada categoria._
+
+_Quin és el valor absolut de la diferència de percentatges? Calculeu l’interval de confiança d’aquestes diferències amb el mètode de bootstrap no paramètric._
+
+```{r}
+taula_dades <- table(dades$CF_IV, dades$MORT_12m)
+taula_dades
+
+
+CF_IV_NO_true <- taula_dades[1,2]/sum(taula_dades[1,])
+CF_IV_SI_true <- taula_dades[2,2]/sum(taula_dades[2,])
+
+RD_true <- abs(CF_IV_SI_true-CF_IV_NO_true); RD_true
+
+rep<-100000
+distrib_RD <- c()
+
+for(i in 1:rep){
+  rand <- sample(1:n,size=n, replace=TRUE)
+  
+  taula_aux <- table(dades$CF_IV[rand], dades$MORT_12m[rand])
+  
+  CF_IV_NO <- taula_aux[1,2]/sum(taula_aux[1,])
+  CF_IV_SI <- taula_aux[2,2]/sum(taula_aux[2,])
+  
+  RD <- abs(CF_IV_SI-CF_IV_NO)
+  
+  distrib_RD <- c(distrib_RD, RD)
+}
+
+IC_RD <- quantile(distrib_RD, probs = c(0.025, 0.975)); IC_RD
+```
+
+(d) _Plantegeu ara el contrast d’hipòtesi de l’apartat anterior, definint la hipòtesi nul·la i l’alternativa de forma bilateral. Realitzeu un test permutacional exacte per a resoldre aquest contrast i calculeu el seu p-valor. Representeu gràficament la distribució empírica sota la hipòtesi nul·la. Quina és la conclusió del contrast?_
+
+Si el que volem estudiar és si la Classe Funcional 4 es una factor associat a la mortatalitat, el que hi ha que contrastar és si la diferència de risc definida en el apartat anterior és significativa o no, aixo equival al següent contrast bilateral: 
+
+$$
+H_0: RD=0 \\
+H_1: RD \neq 0
+$$
+
+La hipòtesi nul·la, tal i com està definida, equival a dir la Classe Funcional 4 no es un factor associat a la mortalitat, ie, que la mortalitat en cadascuna de les classe es distribueix de la mateix forma. 
+
+Per tant, de forma teòrica el que hi ha que plantejar és un contrast Xi-quadrat ver veure si hi han diferències significatives entre les dues classe, en efecte, s'obtindria:
+
+```{r}
+chisq.test(taula_dades)
+```
+Com era d'esperar, s'observa que la variable Classe Functional 4 és un factor associat de la mortalitat
+
+```{r}
+rep<-100000
+st <- numeric(rep)
+cnt <- 0
+n <- length(dades$MORT_12m)
+
+taula_dades <- table(dades$CF_IV, dades$MORT_12m)
+
+CF_IV_NO_true <- taula_dades[1,2]/sum(taula_dades[1,])
+CF_IV_SI_true <- taula_dades[2,2]/sum(taula_dades[2,])
+
+sttrue <- CF_IV_SI_true-CF_IV_NO_true
+
+
+for (i in 1:rep) {
+  remostra <- sample(dades$MORT_12m, n, replace = FALSE)
+  
+  taula_aux <- table(dades$CF_IV, remostra)
+
+  CF_IV_NO <- taula_aux[1,2]/sum(taula_aux[1,])
+  CF_IV_SI <- taula_aux[2,2]/sum(taula_aux[2,])
+  
+  st[i] <- CF_IV_SI-CF_IV_NO
+  if(abs(st[i]) > abs(sttrue)){ cnt <- cnt +1}
+}
+
+p_value <- cnt/rep
+p_value
+```
+
+(e) _Volem fer ara un model estadístic de predicció de la mortalitat per aquests pacients (ajusteu una regressió logística amb totes les variables amb el mètode “convencional”). És a dir, ajusteu un model per a obtenir el següent:_
+
+$$
+P(\text{Mort} | X_1,...,X_n)
+$$
+_Un cop ajustat el model, calen totes les covariables? Simplifiqueu el model si us sembla adient i justifiqueu el motiu. Escriviu també la fòrmula final del model logístic que obtingueu amb els paràmetres ajustats. Calculeu finalment la magnitud de l’efecte en termes de l’Odds Ratio (OR)._
+
+En primer lloc, ajustarem el model logistis a les nostres dades per intentar fer prediccions de la mortalitat dels individus, en efecte:
+
+```{r}
+model <- glm(MORT_12m ~ . , data=dades %>% dplyr::select(-IR), family = binomial(link = "logit"))
+summary(model)
+```
+Com es pot veure, no tots els coeficients del predictor lineal son significatius. 
+
+```{r}
+model2 <- glm(MORT_12m ~ . , data=dades %>% dplyr::select(-IR, -EDAT, -SEXE), family = binomial(link = "logit"))
+summary(model2)
+```
+```{r}
+exp(model2$coefficients %>% tail(3))
+```
+el increment d'una unitat en la variable CREA afecta en exp(beta3) al increment de les odds (risc)
+
+```{r, echo=FALSE, eval=FALSE}
+ equatiomatic::extract_eq(model2, wrap=TRUE, use_coefs = TRUE)
+```
+
+
+$$
+\begin{aligned}
+\log\left[ \frac { \widehat{P( \operatorname{MORT\_12m} = \operatorname{SI} )} }{ 1 - \widehat{P( \operatorname{MORT\_12m} = \operatorname{SI} )} } \right] &= -3.79 + 0.75(\operatorname{FAPERM}_{\operatorname{SI}}) + 1.81(\operatorname{CF\_IV}_{\operatorname{SI}}) + 0.62(\operatorname{CREA})
+\end{aligned}
+$$
+
+
+(f) _Doneu l’interval de confiança mitjançant bootstrap paramètric per als paràmetres del model anterior. Tingueu en compte les següents especificacions:_
+
+En cada mostra bootstrap es tindrà que simular una variable de bernoilli per cada individu/cas de la mostra original i després fer el model de regressió amb els valors que s'obtenen. En efecte
+
+```{r}
+n <- length(dades$MORT_12m)
+rep <- 100
+
+coefs <- numeric(4*rep)
+dim(coefs) <- c(rep, 4)
+
+dades_aux <- dades %>% dplyr::select(-IR, -EDAT, -SEXE) %>% mutate("pi_i" = model2$fitted.values) 
+
+for(i in 1:rep){
+  dades_boot <- dades_aux %>% mutate("MORT_pred" = map_dbl(pi_i, ~ rbernoulli(n=1,p=..1))) %>% 
+    mutate("MORT_pred" = MORT_pred %>% factor(labels = c("NO","SI"), levels = c(0,1)))
+  
+  model_aux <- glm(MORT_pred ~ . , data=dades_boot %>% dplyr::select(-pi_i, -MORT_12m), family = binomial(link = "logit"))
+  
+  coefs[i,] <- model_aux$coefficients
+}
+
+
+estim_boot <- apply(coefs, MARGIN = 2, FUN=mean) %>% as.matrix(ncol=1) 
+sd_boot <-  apply(coefs, MARGIN = 2, FUN=sd) %>% as.matrix(ncol=1) 
+
+ci_boot <- cbind(estim_boot, estim_boot) + 1.96 * matrix(rep(c(-1,1),length(estim_boot)), ncol=2, byrow=TRUE) * cbind(sd_boot,sd_boot)/sqrt(n)
+
+matriu <- cbind(estim_boot,ci_boot)
+colnames(matriu) <- c("estimates", "lower", "upper")
+rownames(matriu) <- c("b0", "b1", "b2", "b3")
+print(matriu)
+  
+```
+(g)
+
+Calcularem el accurancy del model ajustat
+
+```{r}
+threshold <- 0.5
+
+fit_model <- as.numeric(model2$fitted.values>threshold)  %>% factor(labels = c("NO","SI"), levels = c(0,1))
+
+valors <- data.frame(dades$MORT_12m, fit_model); head(valors)
+
+confusion_mat <- table(valors)
+accuracy <- (confusion_mat[1,1]+confusion_mat[2,2] )/sum(confusion_mat); accuracy
+
+```
+Estimacio de bootstrap no paramètric del accuracy
+
+```{r}
+rep <- 1000
+n <- length(dades$MORT_12m)
+accuracy_boot <- numeric(rep)
+threshold <- 0.5
+
+
+for(i in 1:rep){
+  rand <- sample(1:n, size = n, replace=TRUE)
+  dades_aux <- dades[rand,]
+  
+  model_aux <- glm(MORT_12m ~ . , 
+                   data=dades_aux %>% dplyr::select(-IR, -EDAT,-SEXE),
+                   family = binomial(link = "logit"))
+  
+  fit_model_aux <- as.numeric(model_aux$fitted.values>threshold)  %>% 
+    factor(labels =c("NO","SI"), levels = c(0,1))
+  
+  valors_aux <- data.frame(dades_aux$MORT_12m, fit_model_aux)
+
+  confusion_mat_aux <- table(valors_aux)
+  accuracy_boot[i] <- (confusion_mat_aux[1,1]+confusion_mat_aux[2,2] )/sum(confusion_mat_aux)
+  
+}
+
+estim_accuracy <- mean(accuracy_boot)
+hist(accuracy_boot)
+```
+
+```{r}
+optim_accuracy <- function(model, profunditat=0.01){
+  
+  resposta <- model$formula %>% as.character %>% .[2]
+  dades <- model$data
+  
+  orig <- dades[resposta]
+  pred <- model$fitted.values
+  
+  val_accur <- seq(0,1, by=profunditat)
+  umbral_decisio <- 0 
+  ac<-0
+  
+  for(i in 1:length(val_accur)){
+    
+    fit_model_op <- as.numeric(pred>val_accur[i])  %>% factor(labels = c("NO","SI"), levels = c(0,1))
+    
+    valors_op <- data.frame(orig, fit_model_op)
+    
+    confusion_mat_op <- table(valors_op)
+    accuracy_aux <- (confusion_mat_op[1,1]+confusion_mat_op[2,2] )/sum(confusion_mat_op)
+    
+    if(accuracy_aux > ac){ 
+      umbral_decisio <- val_accur[i]
+      ac <- accuracy_aux
+      
+      }
+  }
+  
+  return(data.frame(threshold=umbral_decisio, accuracy=ac))
+}
+
+
+
+optim_accuracy(model2, profunditat = 0.01)
+```
+
+
+

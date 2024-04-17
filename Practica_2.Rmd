@@ -1,0 +1,511 @@
+---
+title: "Practica 2"
+author: "Jose Calatayud Mateu"
+date: "2024-03-01"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(plyr)
+library(ggplot2)
+library(haven)
+library(readxl)
+library(readr)
+library(tidyverse)
+```
+
+# Part 1
+
+## Qüestió 1
+
+
+
+```{r}
+# Importació de les dades i modificacions
+
+dt<- readxl::read_excel("files/dades_ratio_dits_Remostreig_2022-23.xlsx")
+
+dades_plot <- dt[,c("index","sexe")]
+dades_plot <- dades_plot[complete.cases(dades_plot),]
+ggplot(dades_plot, aes(x=index, fill=sexe)) + geom_density(alpha=0.4)
+```
+
+
+```{r}
+H <- dades_plot[dades_plot$sexe=="h",]$index
+D <- dades_plot[dades_plot$sexe=="d",]$index
+t.test(H,D)
+```
+
+
+
+
+```{r}
+rep<-100000
+st <- numeric(rep)
+cnt <- 0
+
+sttrue <- mean(H)-mean(D)
+
+n1 <- length(H)
+n<-nrow(dades_plot)
+
+for (i in 1:rep) {
+  remostra <- sample(dades_plot$index, n, replace = F)
+  hmostra <- mean(remostra[1:n1])
+  dmostra <- mean(remostra[-(1:n1)])
+  st[i] <- hmostra-dmostra
+  if(abs(st[i]) > abs(sttrue)){ cnt <- cnt +1}
+}
+
+p_value <- cnt/rep
+p_value
+
+```
+```{r}
+hist(st, col="blue")
+abline(v=sttrue, col="red", lwd=3)
+```
+
+```{r}
+rep<-100000
+st <- numeric(rep)
+cnt <- 0
+
+sttrue <- median(H)-median(D)
+
+n1 <- length(H)
+n<-nrow(dades_plot)
+
+for (i in 1:rep) {
+  remostra <- sample(dades_plot$index, n, replace = F)
+  hmostra <- median(remostra[1:n1])
+  dmostra <- median(remostra[-(1:n1)])
+  st[i] <- hmostra-dmostra
+  if(abs(st[i]) > abs(sttrue)){ cnt <- cnt +1}
+}
+
+p_value <- cnt/rep
+p_value
+
+```
+
+
+```{r}
+hist(st, col="blue")
+abline(v=sttrue, col="red", lwd=3)
+```
+
+## Qüestió 2
+
+```{r}
+TRC <- read_delim("C:/Users/jcalatayud/Desktop/Simulacio_i_Remostreig/Practica/files/TRC.csv", delim = "\t")
+
+summary(TRC)
+
+before <- TRC$FE_b
+after <- TRC$FE_12m
+t.test(before,after, paired=TRUE)
+diff <- after-before
+hist(diff, col="blue")
+```
+
+```{r}
+rep <- 1000
+sttrue <- mean(diff)
+n<-nrow(TRC)
+cnt<-0
+st<-numeric(rep)
+
+for (i in 1:rep) {
+  remostra <- sample(c(1,-1), n, replace = T)
+  st[i] <- mean(diff*remostra)
+  if(abs(st[i]) > abs(sttrue)){ cnt <- cnt +1}
+}
+
+pvalue <- cnt/rep
+pvalue
+```
+Sota la hipòtesi nul·la, de 10.000 permutacions no hem trobat ni una que sigui més extrema que el valor de la mostra, això es una evidència super forta per rebutjar la hipòtesi nul·la, la nostra hipòtesi és brutalment 
+
+Podem dir que, el abans i el després és brutalment significatiu, però no podem afirmar que un es millor que un altre si no tenim un grup CONTROL.
+Ací hi ha associació, però l'associació NO implica efecte.
+
+La diferència del abans i el després és significativa però NO es pot saber si es pels tractaments o no.
+
+
+```{r}
+hist(st, col="blue", xlim=c(-6,10))
+abline(v=sttrue, col="red", lwd=3)
+```
+
+## Qüestió 3
+
+*Assume that during a three-hour period spent outside, a person recorded the temperature, the amount of time they mowed the grass, and their water consumption. The experiment was conducted on 7 randomly selected days during the summer. The data is shown in the table below with the temperature placed in increasing order.*
+
+  _1. Plot the data_
+
+```{r}
+Temp <- c(75,83,85,85,92,97,99)
+WC <- c(16,20,25,27,32,48,48)
+TMG <- c(1.85,1.25,1.5,1.75,1.15,1.75,1.6)
+dades <- data.frame(Temp, WC, TMG)
+plot(dades)
+```
+
+  _2. Predict the Water Consumption as a linear function of the Temperature (T) and the Time mowing the grass (TMG) by means of a multiple regression model. Explore interactions to fit the model. Is the interaction necessary in the model? Why?_
+
+```{r}
+model <- lm(WC~Temp+TMG)
+a<-summary(model); a
+temptrue <- a$coefficients[2,3]
+TMGtrue <- a$coefficients[3,3]
+
+model_interact <- lm(WC~Temp*TMG)
+summary(model_interact)
+```
+
+La interacció no es necessaria en el model perque NO és significativa. D'acord amb el resultat del plot de l'apartat anterior, sembla no haver-hi cap tipus de relació entre les covariables com per poder tindre en compte la seua interacció. Aloeshores, la introducció d'una intracció no significativa fa que la resta de variables deixen de ser-ho no capturant cap tipus de nova variabilitat.
+
+  _3. Write the model and check the model assumptions._
+
+Model escrit:
+
+$$
+WC = -121.65 + 1.51 \cdot Temp + 12.53 \cdot TMG
+$$
+Checkejar les suposicions del model (Gauss-Markov):
+  
+  1. Linealitat i nul·litat
+  2. Normalitat dels residus
+  3. Homocedasticitat
+  4. No autocorrelacionades
+  
+```{r, fig.width=10}
+par(mfrow=c(3,2))
+plot(model, 1:6)
+```
+
+  _4. Test the significance of the variables T and TMG using an exact permutation test._
+
+
+En el model sense interacció ens indica que les variables Temp i TMG sí son significatives. Ara s'intentarà trobar els mateix resultat utilitzant el permutation test.
+
+El que fem en aquest tipus de contrast es permutar la resposta ja que si la nostra hipòtesi es que els coeficients del model son zero, en dona igual la resposta que tingui perque no hi ha cap tipus d'associació entre la resposta i les covariables.
+
+
+```{r}
+rep<-100000
+ztemp <- numeric(rep)
+zTMG <- numeric(rep)
+
+for(i in 1:rep){
+  newWC <- sample(WC, size=length(WC), replace=FALSE)
+  newmod <- lm(newWC~Temp+TMG)
+  a<-summary(newmod)
+  ztemp[i] <- a$coefficients[2,3] 
+  zTMG[i] <- a$coefficients[3,3]
+}
+
+pvalueTemp <- sum(abs(ztemp) > abs(temptrue))/rep
+pvalueTMG <- sum(abs(zTMG) > abs(TMGtrue))/rep
+kableExtra::kable(data.frame(pvalueTemp,pvalueTMG))
+```
+
+```{r}
+par(mfrow=c(1,2))
+hist(ztemp, col='blue'); abline(v=temptrue, col="red", lwd=3)
+hist(zTMG, col='green'); abline(v=TMGtrue, col="red", lwd=3)
+```
+
+  _5. What is the predicted Water Consumption for T=95 and TMG=2? Find a 95$\%$ confidence interval_
+
+
+```{r}
+pred<-predict(model, newdata = data.frame(Temp=95,TMG=2), interval = c("confidence"), level=0.95);
+pred
+```
+
+El valor de la prdicció donada pel model sense interacció és `r pred[1]` amb interval de confiança del $95\%$ de [`r pred[2]`,`r pred[3]`]. 
+
+
+## Questió 4
+
+_Give the estimation for the parameters of a linear regression by the method of the least squares_ $Y_i = \beta_0 + \beta_1 X_i$.
+
+El objectiu d'aquest apartat és obtindre les estimacions dels paràmetres de regressió pel mètode de Mínims Quadrats. En efecte, aquest mètode està basat en minimitzar el error quadràtic de la diferència entre el valor real i el valor teòric donada per la recta de regressió. 
+
+Nosaltres partim de l'objectiu de que podem ajustar una recta de regressió, en funció de covariables, a les observacions de $Y_i$, i.e, $Y_i = \beta_0 + \beta_1 X_i$. Aleshores es miniritzarà el següent error:
+
+$$
+F=\sum_{i=1}^n e_i^2 = \sum_{i=1}^n (y_i-\beta_0-\beta_1 x_i)^2
+$$
+Amb el objectiu de minimitzar en ment, es calcularan les respectives derivades parcials:
+
+$$
+\dfrac{\partial F}{\partial \beta_0}= -2 \cdot \sum_{i=1}^n(y_i-\beta_0-\beta_1 x_i) \\
+\dfrac{\partial F}{\partial \beta_0}= -2 \cdot \sum_{i=1}^n(y_i-\beta_0-\beta_1 x_i) \cdot x_i \\
+$$
+d'on es dedueixen les dues equacions normals:
+
+$$
+\sum_{i=1}^n(y_i-\beta_0-\beta_1 x_i)=0 \\
+\sum_{i=1}^n(y_i-\beta_0-\beta_1 x_i) \cdot x_i =0
+$$
+
+De la primera equació es dedueix que,
+
+$$
+\sum_{i=1}^n y_i- n\beta_0-\beta_1 \sum_{i=1}^nx_i = 0 \\
+n\bar{y} - n\beta_0 - n\beta_1\bar{x}=0 \\
+\bar{y} - \beta_0 - \beta_1\bar{x}=0  \\
+$$
+de la última expressió s'obté que $\beta_0$ en funció de $\beta_1$:
+
+$$
+\hat{\beta_0} = \bar{Y}- \beta_1\bar{X}
+$$
+Ara, desenvolupant la segona equació normal, i tenint en compte aquest resultat,:
+
+$$
+\sum_{i=1}^n y_ix_i-\beta_0\sum_{i=1}^n x_i -\beta_1 \sum_{i=1}^n x_i^2 = 0 \\
+\sum_{i=1}^n y_ix_i-(\bar{y}- \beta_1\bar{x})\sum_{i=1}^n x_i -\beta_1 \sum_{i=1}^n x_i^2 = 0 \\
+\sum_{i=1}^n y_ix_i-\bar{y}\sum_{i=1}^n x_i+ \beta_1\bar{x}\sum_{i=1}^n x_i -\beta_1 \sum_{i=1}^n x_i^2 = 0 \\
+n\bar{xy}-n\bar{x}\bar{y}+ n\beta_1\bar{x}^2 -n\beta_1 \bar{x_i^2} = 0 \\
+Cov(X,Y) - \beta_1Var(X)=0
+$$
+Aleshores, es deduiex que:
+
+$$
+\hat{\beta_1}= \dfrac{Cov(X,Y)}{Var(X)}
+$$
+I aquestes serien les estimacions del coefficients de la recta pel mètode de mínims quadrats ordinari.
+
+## Qüestió 5
+
+*Atrial fibrillation is an abnormal heart rhythm (arrhythmia) characterized by rapid and irregular beating of the atrial chambers of the heart and is associated with an increased risk of heart failure, dementia, and stroke.*
+
+
+  _1. Make a description of the sample and clean the data._
+  
+```{r}
+data <- read_sav("C:/Users/jcalatayud/Desktop/Simulacio_i_Remostreig/Practica/files/ABLACIO_FA_REMOSTREIG.sav")
+summary(data)
+
+data[,c("SEX","HTA","ARRHYTHMIA", "TECHNIQUE", "RECURRENCE")] <- lapply(data[,c("SEX","HTA","ARRHYTHMIA", "TECHNIQUE", "RECURRENCE")], FUN = factor)
+
+skimr::skim(data)
+```
+
+
+  _2. Test the significance of the comparison between techniques and compute the probability of recurrence using an exact permutation test._
+  
+L'objectiu és comparar entre els dos tipus de tècniques i contrastar si hi han diferències significatives entre els dos grups o no. Llavors, la idea, igual que en la resta de permutation test, està basada en la suposició de la hipòtesi nul·la de que els dos grups tenen un mateix compartament (voldrà dir que amb el suposit de comportament homogeni dels dos tractament el percentatge de arrhythmia d'un dels dos tractament no serà significativament diferent al del altre tractament), en definitiva el que voldrem trobar és si les variables ARRHYTHMIA i TECHNIQUE son independents o no, entre elles. Aleshores presenten la següent hipòtesi:
+
+$$
+H_0: \text{Recurrència i Technique son independents}
+$$
+
+O de forma similar, podriem escriure com una diferència de proporcions de 
+
+```{r}
+a<-table(data$RECURRENCE,data$ARRHYTHMIA)
+modelchisq <- chisq.test(a); modelchisq
+```
+
+Segon el resultat del test, amb un nivell de significancia del $5\%$, hi ha suficients evidència per poder rebutjar la hipòtesi nul·la d'independència de tractament, fent així que hi ha una associació entre el tipus de tractament que rep el pacient i la presència o no d'arrhythmies. 
+
+Ara anem a simular aquests resultats amb el permutation test i contrastar la mateixa hipòtesi. Ara com que suposarem per hipòtesi que son independents, ens donarà igual aleatoritzar els resultats de arrhythmia perque si hi ha independència voldrà dir que el comportament de que tingui presència o no d'arrhythmia és independent del tipus de tractament.
+
+```{r}
+rep<-100000
+xsquared <- numeric(rep)
+xsquaredtrue <- modelchisq$statistic
+REC <- data$RECURRENCE
+TEC <- data$TECHNIQUE
+
+for(i in 1:rep){
+  newREC <- sample(REC, size=length(REC), replace=FALSE)
+  a<-table(newREC, TEC)
+  newmod <- chisq.test(a)
+  xsquared[i] <- newmod$statistic
+}
+
+pvalueXsquared <- sum(xsquared > xsquaredtrue)/rep
+pvalueXsquared
+```
+
+En canvi d'utilitzar els test de Xi-quadrat, també s'haguera pogut utilitzar tests com $OR=1$, igualtat de Risk Ratio per cada grup...
+
+
+
+# Part 2
+
+## Qüestió 1
+
+El contrast de Hotelling tracta de contrastar la igualtat de la mitjana a un valor però ara la mitjana és un vector de mitjanes.
+ 
+$$
+H_0: \mu_1 = \mu_0 \\
+\text{d'on } \mu_1=(\mu_{11}, \mu_{12}, ...,\mu_{1n})
+$$
+
+```{r}
+data(iris)
+df<-iris[c(1:10),]
+df
+```
+
+```{r}
+skimr::skim(iris)
+summary(iris)
+```
+
+
+```{r}
+pairs(iris[,1:4], main="Iris Data", 
+      bg=c("red","green3", "blue")[unclass(iris$Species)], pch=21)
+
+# install.packages("GGally")
+library(GGally)
+
+ggpairs(iris, columns = 1:4, aes(color = Species, alpha = 0.5),
+        upper = list(continuous = wrap("cor", size = 2.5))) 
+
+```
+
+2. _Is a Supervised or Unsupervised problem? Why?_
+
+Es tracta d'un problema supervisat perque coneguem el grup al que pertany cada planta
+
+
+3. _Construct a function for calculating the Hotelling $T^2$ statistic and compare Iris Setosa and Iris Versicolor (choose only the first 10 observations by group)._
+
+
+```{r}
+class(split(iris[,1:4], iris$Species))
+
+
+
+hotelling <- function(data, variables_comparar){ # en la ultima posició sempre estarà la variable a separar
+  grups<-data[,ncol(data)]
+  data <- data[,-ncol(data)]
+
+  lista <- split(data, grups)
+  grup1<- lista[[variables_comparar[1]]][1:10,]
+  grup2 <- lista[[variables_comparar[2]]][1:10,]
+  
+  n1<- nrow(grup1)
+  n2<- nrow(grup2)
+  
+  x1 <- apply(grup1, MARGIN=2, FUN=mean)
+  x2 <- apply(grup2, MARGIN=2, FUN=mean)
+  
+  S1 <- var(grup1)
+  S2 <- var(grup2)
+  
+  Sp <- ((n1-1)*S1 +(n2-1)*S2)/(n1+n2-2)
+  Spinv <- solve(Sp)
+  
+  T2 <- (n1*n2*t(x1-x2)%*%Spinv%*%(x1-x2))/(n1+n2)
+  
+  m<-ncol(grup1)
+  
+  Fisher <- (n1 + n2 - m - 1)*T2*1/((n1 + n2 - 2)*m)
+  p_value <- 1-pf(Fisher,m, n1+n2-m-1)
+  
+  return(list(T2=as.numeric(T2),
+              Fisher=as.numeric(Fisher),
+              p_Value=as.numeric(p_value)))
+}
+
+hotelling(iris, c("setosa","versicolor"))
+```
+
+4. _Perform a permutation test based on the F-statistic and compare the results._
+
+```{r}
+rep<-10000
+data <- iris
+dt <- data %>% filter(Species %in% c("setosa", "versicolor"))
+Fistrue <- hotelling(iris, c("setosa","versicolor"))$Fisher
+Fis <- numeric(rep)
+
+for(i in 1:rep){
+  dt$Species <- sample(dt$Species, size=nrow(dt), replace=FALSE)
+  x<-hotelling(dt, c("setosa", "versicolor"))
+  Fis[i] <- x$Fisher
+}
+
+p_valor <- sum(abs(Fis)>Fistrue)/rep
+p_valor
+```
+
+
+```{r}
+library(ggplot2)
+
+ggplot(data.frame(F=Fis), aes(x =Fis)) +
+  geom_histogram()
+
+```
+
+5. _The initial assumptions for the classical Hotelling $T^2$ test are common variance-covariance matrix for the two groups. Do a permutation test for comparing two variance-covariance matrices using the Frobenius norm:_
+
+Agafarem com a estadístic la norma de les diferècies de les matrius de covariàncies i, per tant, si denotem per $\Sigma_i$ a la matriu de variàncies-covariàncies del grup i-èssim s'obté com a hipòtesi nul·la:
+
+$$
+H_0: ||\Sigma_1-\Sigma_2||_F=0
+$$
+
+En primer lloc, es crearà una funció que calcule la norma de Frobenius donada una matriu A, en efecte;
+
+```{r}
+traza <- function(A){
+  return(sum(diag(A)))
+}
+
+frobenius <- function(A){
+  sqrt(traza(A*A))
+}
+
+
+```
+Encara que es vol fer aquest contrast, no es necessaria la suposició de que les matrius de var-cov son igual al fer el contrast de Hotelling si faig la suposisició de que els grups son iguals i aleatoritze (la suposició de igualtat de grups conté la de igualtat de var-cov).
+
+
+```{r}
+rep<-10000
+data <- iris
+dt <- data %>% filter(Species %in% c("setosa", "versicolor"))
+x<-dt %>% split(~Species)
+var_setosa <- var(x$setosa %>% select(-Species))
+var_versicolor <- var(x$versicolor %>% select(-Species))
+stadistic_true <- frobenius(var_setosa-var_versicolor)
+Stat <- numeric(rep)
+  
+  
+for(i in 1:rep){
+  dt$Species <- sample(dt$Species, size=nrow(dt), replace=FALSE)
+  x<-dt %>% split(~Species)
+  var_setosa <- var(x$setosa %>% select(-Species))
+  var_versicolor <- var(x$versicolor %>% select(-Species))
+  Stat[i] <- frobenius(var_setosa-var_versicolor)
+}
+
+p_valor <- sum(abs(Stat)>stadistic_true)/rep
+p_valor
+```
+
+No hi ha evidència per rebutjar la hipòtesi nul·la d'igualtat de matrius de variàncies
+
+
+
+
+

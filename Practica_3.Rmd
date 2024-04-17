@@ -1,0 +1,458 @@
+---
+title: 'Practica 4: Jackknife'
+author: "Jose Calatayud Mateu"
+date: "2024-03-28"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(haven)
+```
+
+
+
+## Problema 1
+
+*El nostre objectiu és provar si el volum dels ventricles es pot ser predit pels diàmetres ja que els primera són més complicats de mesurar i cal una màquina nova (i molt cara!).*
+
+
+```{r}
+library(foreign)
+ECOS <- read.spss('files/ECOS_sample.sav', use.value.labels = TRUE, to.data.frame = TRUE); head(ECOS)
+```
+
+_1. Feu el gràfic de les dades._
+
+```{r}
+plot(ECOS$DTSVE , ECOS$VTSVE)
+abline(lm(VTSVE~DTSVE, data=ECOS))
+```
+
+Sembla haver-hi un aparent correlació gràfica amb les dades, sent raonable la regressió del model.
+
+
+_2. Quin tipus de model ajustarieu a aquestes dades? Ajusteu aquest model a les dades, i interpreteu els resultats obtinguts._
+
+Donada aquestes dades en que tots dues variables son numériques, sembla raonable fer un ajust lineal (caldria pensar si algun altre tipus de transformació sobre les dades puguera millorar l'ajust, però no sembla que es diferèncie gaire del model lineal sense transformacions)
+
+```{r}
+pacman::p_load(devtools)
+library(devtools)
+install_github(repo = "datalorax/equatiomatic")
+
+model<- lm(VTSVE~DTSVE, data=ECOS)
+model2<- lm(log(VTSVE)~log(DTSVE), data=ECOS)
+summary(model)
+summary(model2)
+```
+Donat els resultat del model, aquest és significatiu i tots els coeficients del model també ho son però el signe del intercept es negatiu cosa que ens fa plantejar-se la idea de eliminar el intercept del model ja que si el diametre fos zero aleshores el volum seria negatiu i un volum mai pot ser negatiu. Per afegir, el que si trobem raonable es el signe de coeficient del diametre ventricular.
+
+```{r}
+
+model_si <- lm(VTSVE~-1+DTSVE, data=ECOS)
+summary(model_si)
+AIC(model)
+AIC(model2)
+AIC(model_si)
+
+```
+El model sense intercept presenta un millor ajust però un valor superior tant d'RSE com de AIC fet que pot indicar-nos que ens quedem amb el model original amb intercept, però si ens quedarem amb aquest model la seua interpretació no tindria sentit perque si el valor del diametre es zero, aleshores tindria un volumen negatiu. El model que presenta un menor RSE i AIc és la log-log i serà aquest el model escollit.Per tant, escriurem la equació resultant del model:
+
+_3. Escriviu quin és el model ajustat._
+
+```{r, echo=FALSE, eval=FALSE}
+ equatiomatic::extract_eq(model2, wrap=TRUE, use_coefs = TRUE)
+```
+$$
+\begin{aligned}
+\operatorname{\widehat{log(VTSVE)}} &= -2.19 + 1.8 \cdot \operatorname{\log(DTSVE)}
+\end{aligned}
+$$
+
+que escrit d'una altra forma resultaria:
+
+$$
+\begin{aligned}
+\operatorname{\widehat{VTSVE}} &= 0.11\cdot \operatorname{DTSVE}^{1.8}
+\end{aligned}
+$$
+que es el resultat de exponencial l'expressió anterior:
+
+
+_4. Calculeu intervals de confiança del_ $95\%$ _de_ $\beta_1$ _i_ $\beta_2$ _intervals amb els del mètode clàssic i mitjançant el mètode Jackknife._
+
+De forma teòrica s'obtenen el següent intervals de confiança, per als coeficients del model log-log transformat:
+
+```{r}
+ci <- confint(model2, )
+ci[1,] <- exp(ci[1,]) #exponenciem per obtindre b1 i no el interval per log(b1)
+rownames(ci) <- c("b1", "b2")
+print(ci)
+```
+Ara es calcularan aquest intervals utilitzant el mètode Jackknife:
+
+```{r}
+ECOS_modif <- log(ECOS)
+theta <- model2$coefficients 
+n<- length(ECOS_modif$DTSVE)
+
+thetai <- pseudov <- numeric(2*n)
+dim(thetai) <- dim(pseudov) <- c(n, 2)
+
+for(j in 1:n){
+  outcome_new <- ECOS_modif$VTSVE[-j]
+  rand_new <- ECOS_modif$DTSVE[-j]
+  rl_jakk <- lm(outcome_new ~ rand_new)
+  thetai[j,] <- rl_jakk$coefficients #%>% as.matrix %>% t %>% apply(.,MARGIN=1, FUN=function(x){x[1]<-exp(x[1]);return(x)}) %>% as.numeric
+  pseudov[j,] <- n*theta-(n-1)*thetai[j,]
+}
+
+estim_jack <- apply(pseudov, MARGIN = 2, FUN=mean) %>% as.matrix(ncol=1) 
+sd_jack <-  apply(pseudov, MARGIN = 2, FUN=sd) %>% as.matrix(ncol=1) 
+
+ci_jack <- cbind(estim_jack, estim_jack) + 1.96 * matrix(c(-1,1,-1,1), ncol=2, byrow=TRUE) * cbind(sd_jack,sd_jack)/sqrt(n)
+estim_jack[1] <- estim_jack[1] %>% exp
+ci_jack[1,] <- ci_jack[1,] %>% exp
+
+matriu <- cbind(estim_jack,ci_jack)
+colnames(matriu) <- c("estimates", "lower", "upper")
+rownames(matriu) <- c("b1", "b2")
+print(matriu)
+```
+
+_5. Feu una exploració dels pseudovalors. Què en dieu?_
+
+```{r}
+plot(pseudov[,1])
+plot(pseudov[,2])
+```
+
+A partir del plot de les dades es pot observa que presenta variabilitat superior de l'estimació del pseudo valor quan s'extrauen valors dels extrems del data. Si observes el data i com esta disposada la informació en el mateix, segueix una mena d'ordenació arbitraria però els valors superior estar en les primeres files i els inferior en les darreres. Això implica que extraure valors extrems fa que els pseudo valors siguin susceptibles a aquest valors. 
+
+
+_6. Les conclusions de l’estudi són les mateixes segons el mètode?_
+
+Les conclusions del estudi son aproximadament aparent a les mostrades amb els dos mètodes ja que presenten interval de confiança i estimacion pròximes.
+
+
+
+## Problema 2
+
+*Volem estimar els paràmetres del model de predicció (basat en logit) utilitzant jackknife. El mètode clàssic utilitza la màxima versemblança que proporciona estimacions asimptòticament sense biaix. No obstant això, per a mostres petites, el biaix podria ser gran.*
+
+```{r}
+temp <- c(66,70,69,68,67,72,73,70,57,63,70,78,67,53,67,75,70,81,76,79,75,76,58)
+y <- c(0,1,0,0,0,0,0,0,1,1,1,0,0,1,0,0,0,0,0,0,1,0,1)
+```
+
+_1. Dibuixeu les dades._
+
+```{r}
+plot(temp,y)
+```
+Sembla, gràficament, que per valor petit de temperatura es donen més èxits (valors quan y pren 1). Segons el context, quan la tempetura es inferior sembla haver-hi una certa relació entre la rotura d'una peça de la nau.
+
+_2. Quin tipus de model ajustarieu a aquestes dades? Justifiqueu el perquè. Ajusteu aquest model a les dades, i interpreteu els resultats obtinguts._
+
+Donada l'estructura de les dades, el més coherent seria utilitzar el model logístic, ja que l'objectiu es predir exit o fracàs (una variable dicotòmica) en funció d'una variable numérica. En efecte;
+
+```{r}
+model <- glm(y ~ temp, family = binomial(link = "logit"))
+plot(temp,model$fitted.values)
+```
+El model ens diu que a una temperatura alta hi ha menys probabilitats de que la peça pateixi trencament.
+
+Amb aquest gràfic es mostren els valor de la temperatura en l'eix abcises i en l'eix ordenades es mostra la seua predicció de la probabilitat de trencament de la peça. S'observa que a més baixes temperatures, la probabilitat de trencament és superior.
+
+
+
+```{r}
+pacman::p_load("pROC")
+
+# Calculem les probabilitats predites
+prob_pred <- predict(model, newdata = temp %>% as.data.frame, type = "response")
+
+# Calculamos la curva ROC
+corba_roc <- roc(y, model$fitted.values)
+
+# Encontramos el punto de equilibrio (punto óptimo)
+umbral_decisio <- coords(corba_roc, "best")
+
+# Imprimimos el umbral de decisión
+print(umbral_decisio)
+
+```
+
+I un cop s'ha trobat el umbral de decisió (coordenada) que maximitza l'àrea sota la corba de ROC, podrem obtindre quines son les predicció per al nostre model. En efecte, obtenim:
+
+```{r}
+fit_model <- as.numeric(model$fitted.values>umbral_decisio$threshold)
+valors <- data.frame(temp, y, fit_model); valors
+```
+
+```{r}
+plot(temp, y, col="blue", pch=3, lwd=2)
+points(temp, fit_model, col="red", pch=4, lwd=2)
+```
+El model només s'equivoca quan la temperatura és 70 i 75F.
+
+_4. Calculeu intervals de confiança del_ $95\%$ _de_ $\beta_1$ _i_ $\beta_2$ _intervals amb els del mètode clàssic i mitjançant el mètode Jackknife._
+
+De la forma clàssic amb el model ja construït s'obté:
+
+```{r}
+confint(model)
+```
+I pel mètode Jackknife:
+
+```{r}
+theta<- model$coefficients
+n<- length(temp)
+
+thetai <- pseudov <- numeric(2*n)
+dim(thetai) <- dim(pseudov) <- c(n, 2)
+
+for(j in 1:n){
+  outcome_new <- y[-j]
+  rand_new <- temp[-j]
+  rl_jakk <- glm(outcome_new ~ rand_new, family = binomial(link = "logit"))
+  thetai[j,] <- rl_jakk$coefficients 
+  pseudov[j,] <- n*theta-(n-1)*thetai[j,]
+}
+
+estim_jack <- apply(pseudov, MARGIN = 2, FUN=mean) %>% as.matrix(ncol=1) 
+sd_jack <-  apply(pseudov, MARGIN = 2, FUN=sd) %>% as.matrix(ncol=1) 
+
+ci_jack <- cbind(estim_jack, estim_jack) + 1.96 * matrix(c(-1,1,-1,1), ncol=2, byrow=TRUE) * cbind(sd_jack,sd_jack)/sqrt(n)
+
+matriu <- cbind(estim_jack,ci_jack)
+colnames(matriu) <- c("estimates", "lower", "upper")
+rownames(matriu) <- c("b1", "b2")
+print(matriu)
+```
+_5. Feu una exploració dels pseudovalors. Què en dieu?_
+
+```{r}
+par(mfrow=c(1,2))
+plot(pseudov[,1])
+plot(pseudov[,2])
+```
+Observant les dades, sembla haver-hi un valor que quan s'exclou de la mostra modifica significativement (des de el punt de vist gràfic) el resultat dels pseudovalors. Aquesta valor correspon al index 21 que està associat, tal i com s'ha mostrat en l'apartat anterior que es correspon amb el trencament de la peça a una temperatura de 75F (valor amb temperatura elevada que fa modificar els coeficients del mostre model significativament quan s'exclou).
+
+## Problema 3
+
+*Es creu que els naixements per cesària són més freqüents en els hospitals públics que en els privats. S’ha registrat el total de naixements i el corresponent número de cesàries en 7 hospitals privats i 13 públics, obtenint la següent taula:*
+
+```{r}
+dades <- data.frame(Births = c(236, 739, 970, 2371, 309, 679, 26, 1272, 3246, 1904, 357, 1080, 1027, 28, 2507, 138, 502, 1501, 2750, 192), Hospital = c(0, 1, 0, 1, 1, 1, 0, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1), Caesareans = c(8, 16, 15, 23, 5, 13, 4, 19, 33, 19, 10, 16, 22, 2, 22, 2, 18, 21, 24, 9))
+dades$Hospital <- as.factor(dades$Hospital)
+levels(dades$Hospital) <- c("Private", "Public")
+dades[1:4,]
+```
+
+_1. Quin tipus de model ajustarieu a aquestes dades? Justifiqueu el perquè._
+
+```{r}
+model <- glm(Caesareans~Births+Hospital, data=dades, family = poisson(link = "log"))
+```
+
+La regressió de Poisson és un tipus de model de regressió generalitzat que s'utilitza quan la variable resposta és de conteig d'esdeveniments no negatius. Aquests models son apropiats quan estem interesat en modelar la relació entre la variable resposta de conteig i una o més predictores. S'utlitza en recompte d'esdeveniments, assumeix independència d'esdeveniments (en aquest cas es compleix perque el nombre de cesaries en un hospital es independent del d'un altre) i mitjana igual a la variància (desviació) cosa que en aquest cas es mitjanament semblant:
+
+```{r}
+mean(dades$Births)
+sd(dades$Births)
+```
+
+_2. Ajusteu aquest model a les dades, i interpreteu els resultats obtinguts._
+
+```{r}
+summary(model)
+```
+Tots els coeficients del model son significatius i pel que s'observa amb els resultats, es clar que a major nombre de naixements en un mateix hospital major serà el nombre de cesàries. Endemés, i el que resultat rellevant es que el coeficient associat a la variable factor tipus d'hospital és significatiu i positiva, ie, que la pertinença del hospital a públic fa que en mitjana presenten $e^{0.34}=1.41$ superiors als privats. Amb la qual cosa, sí que sembla que la cesària és més aplicada en els hospitals públics que no pas els privats
+
+_3. Escriviu quin és el model ajustat._
+
+```{r, echo=FALSE, eval=FALSE}
+ equatiomatic::extract_eq(model, wrap=TRUE, use_coefs = TRUE)
+```
+$$
+\begin{aligned}
+\log ({ \widehat{E( \operatorname{Caesareans} )} })  &= 1.97 + 0.0003 \operatorname{Births} + 0.34 \operatorname{Hospital}_{\operatorname{Public}}
+\end{aligned}
+$$
+
+_4. Calculeu intervals de confiança del_ $95\%$ _de_ $\beta_2$  _(tips d’hospital) mitjançant el mètode Jackknife. Quina és la diferència esperada?_
+
+
+```{r}
+confint(model)
+```
+Pel mètode Jackkniffe:
+
+```{r}
+theta<- model$coefficients
+n<- length(dades$Births)
+
+thetai <- pseudov <- numeric(3*n)
+dim(thetai) <- dim(pseudov) <- c(n, 3)
+
+for(j in 1:n){
+  outcome_new <- dades$Caesareans[-j]
+  rand_new <- dades$Births[-j]
+  rand_new2 <- dades$Hospital[-j]
+  rl_jakk <- glm(outcome_new ~ rand_new+rand_new2, family = poisson(link = "log"))
+  thetai[j,] <- rl_jakk$coefficients 
+  pseudov[j,] <- n*theta-(n-1)*thetai[j,]
+}
+
+estim_jack <- apply(pseudov, MARGIN = 2, FUN=mean) %>% as.matrix(ncol=1) 
+sd_jack <-  apply(pseudov, MARGIN = 2, FUN=sd) %>% as.matrix(ncol=1) 
+
+ci_jack <- cbind(estim_jack, estim_jack) + 1.96 * matrix(c(-1,1,-1,1,-1,1), ncol=2, byrow=TRUE) * cbind(sd_jack,sd_jack)/sqrt(n)
+
+matriu <- cbind(estim_jack,ci_jack)
+colnames(matriu) <- c("estimates", "lower", "upper")
+rownames(matriu) <- c("b0", "births","hospital-public")
+print(matriu)
+```
+
+El que s'observa entre els dos intervals de confiança del coeficient associat a la variable Hospital (respecte de la classe factor públic) és que el original no conte valors negatius ni el zero, hi per tant es podria dir que la cesaria és significativament superior en els hospitals publics davant dels privats. En canvi, amb el mètode Jackknife inclús el interval de confiança presenta valors negatius indicant que no és significatiu ja que pren valor negatius (cosa que està associada a que els hospitals privats facin més cesaries en mitjana que els públics).
+
+
+## Problema 4
+
+*En el departament de psiquiatria infantil de l’Hospital Clínic es vol estimar els nivells de cortisol en una sèrie de menors diagnosticats amb esquizofrènia. S’han pres quatre mostres de sang; la primera a les 9:00 del matí, la segona a les 10:00, la tercera a les 12:00 i la quarta a les 15:00 de la tarda.*
+
+
+```{r}
+cortisol <- read_sav("files/Cortisol_psi_remostreig.sav")
+head(cortisol)
+```
+
+
+```{r}
+skimr::skim(cortisol[-1])
+```
+
+
+
+
+```{r}
+pacman::p_load(visdat)
+vis_miss(cortisol)
+```
+
+
+```{r}
+cortisol %>% 
+  mutate_if(is.numeric, function(x) ifelse(is.na(x), mean(x,na.rm=TRUE),x)) -> cortisol
+
+vis_miss(cortisol)
+```
+
+_2. Feu un gràfic de les dades, i comenteu el què observeu._
+
+```{r}
+cortisol %>% pivot_longer(cols = Cortisol_T1:Cortisol_T4,
+                          names_to = "Temps",
+                          values_to = "Cortisol") %>% as.data.frame -> cortisol_long
+
+head(cortisol_long)
+```
+
+```{r}
+ggplot(data=cortisol_long, aes(x=Temps, y=Cortisol, group=Codi)) +
+  geom_line() +
+  geom_point()
+```
+
+A partir del nivels de cortisol, sembla que la primera mesura de cortisol presenta valors superiors respecte la resta de mesures de cortisol i la resta de mesuros sol ser estable en els T2, T3 i T4. 
+
+_3. Creeu la variable AUC. Feu l’estimació i els intervals de confiança amb Jackknife de la mitjana, la mediana i el mínim d’aquest paràmetre_ $\theta$. _Feu una exploració dels pseudovalors. Què en dieu?_
+
+En primer lloc creem la variable AUC
+```{r}
+cortisol %>% mutate("AUC" = pmap_dbl(list(cortisol$Cortisol_T1, Cortisol_T2, Cortisol_T3, Cortisol_T4), ~(..1+..2)*1/2 + (..2+..3)*2/2 + (..3+..4)*3/2)) -> cortisol
+
+cortisol
+```
+
+
+Ara caldrà fer la mitjana, la mediana i el mínim del paràmetre AUC:
+
+```{r}
+theta <- cortisol %>% summarise(mitjana = mean(AUC),
+                                   mediana= median(AUC),
+                                   minim= min(AUC)) %>% as.numeric
+
+names(theta) <- c("mitjana", "mediana", "minim")
+
+n<- length(cortisol$AUC)
+
+thetai <- pseudov <- numeric(3*n)
+dim(thetai) <- dim(pseudov) <- c(n, 3)
+
+for(j in 1:n){
+  dades <- cortisol$AUC[-j]
+  thetai[j,] <- c(mean(dades),median(dades), min(dades))
+  pseudov[j,] <- n*theta-(n-1)*thetai[j,]
+}
+
+estim_jack <- apply(pseudov, MARGIN = 2, FUN=mean) %>% as.matrix(ncol=1) 
+sd_jack <-  apply(pseudov, MARGIN = 2, FUN=sd) %>% as.matrix(ncol=1) 
+
+ci_jack <- cbind(estim_jack, estim_jack) + 1.96 * matrix(c(-1,1,-1,1,-1,1), ncol=2, byrow=TRUE) * cbind(sd_jack,sd_jack)/sqrt(n)
+
+matriu <- cbind(estim_jack,ci_jack)
+colnames(matriu) <- c("estimates", "lower", "upper")
+rownames(matriu) <- names(theta)
+print(matriu)
+```
+Ara farem un exploració dels pseudovalors:
+
+```{r}
+plot(pseudov[,1], main="Pseudo mitjana")
+plot(pseudov[,2], main="Pseudo mediana")
+plot(pseudov[,3], main="Pseudo minim")
+```
+
+Els pseudovalors de la mitjana semblen prou variant, en canvi, i tal com era d'esperar, la mitjana presenta una alternança de pseudovalors entre dos possible i el mínim només pren una vegado un valor diferent i es quan el mínim és eliminat en el remostreig.
+
+
+_4. Compareu l’interval de confiança de la mitjana amb remostreig i amb el mèdode estàndard (el de l’aproximació per la normal)._
+
+Ara calcularem el interval de confiança pel mètodo estandar a partir de la definició del teorema de Fisher. Recordem que el teorema de Fisher diu que, donada una mostra d'una variable aleatoria, la mitjana mostral s'aproxima a una normal amb la esperança de la variable i variància el quocient entre la variancia de la variable i la longitud de la mostra, en efecte, si tipifiquem:
+
+
+$$
+\dfrac{\bar{X}- \mu}{\frac{S}{\sqrt{n}}} \sim N(0,1)
+$$
+
+```{r}
+xhat <- mean(cortisol$AUC)
+S <- sd(cortisol$AUC)
+n <- length(cortisol$AUC)
+
+ci <- xhat + 1.96* c(-1,1) * S/sqrt(n)
+
+data.frame(estimacio=xhat, lower=ci[1], upper=ci[2])
+```
+
+si comparem els resultat del mètode estàndar amb els presentar pel mètode Jackknife s'observa que presenta la mateixa estimació i el mateix interval de confiança.
+
+_5. Si per estudis anteriors sabem que els valors AUC de cortisol dels nens sans són entre 5 i 15, què en podem concloure dels nens esquizofrènics?_
+
+A partir dels resultat anteriors podem veure que amb un confiança del 95%, en mitjana, els valors de AUC es troben entre 28-37 aprox. I que el mínim de l'estimació de la mostra de AUC és al voltatn de valors de 15. 
+
+Si els nens sans presenten valors entre 5 i 15 de AUC, es podria que sembla haver-hi diferències entre els nivells de AUC en nens sans i esquizofrenics.
+
+
+
+

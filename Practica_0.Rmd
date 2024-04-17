@@ -1,0 +1,532 @@
+---
+title: 'Remostreig: Practica 0'
+output: pdf_document
+date: "2024-02-17"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,message = FALSE,warning = FALSE)
+```
+
+# QÜESTIÓ 1: Repassant conceptes
+
+_En aquesta primera part, farem memòria d’aspectes bàsics. Llegiu la base de dades **dades-ratio-dits-Remostreig.xlsx** i realitzeu els següents apartats:_
+
+## Apartat 1 
+
+_Feu una estadística descriptiva de les dades. Trobeu algun error? Si és així, modifiqueu les dades com convingui._
+
+```{r}
+dt<- readxl::read_excel("files/dades_ratio_dits_Remostreig_2022-23.xlsx")
+summary(dt)
+```
+S'observa que el dit *menut* el seu mínim és 6, tenint en compte que son milímetres. és complicat que a una persona le mideixi més tant poc.Segurament sigui un error de introducció dels dades y li falta un 0. Endemés, hi ha variables que es necessite transformar-les a factor.
+
+
+```{r}
+dt$Curs<-as.factor(dt$Curs)
+dt$parella<-as.factor(dt$parella)
+dt$sexe<-as.factor(dt$sexe)
+dt$menut[dt$menut==6]<-60
+summary(dt)
+```
+
+Fixant-se en la variable *parella*; tenim _NO_ i _no, que signifiquen el mateix però R no ho entén així. També es canviaran els labels de h i d per Home i Dona, respectivament.
+
+
+```{r}
+library(plyr)
+dt$parella<-revalue(dt$parella,c(NO="no",no="no"))
+dt$sexe<-revalue(dt$sexe,c(h="Home",d="Dona"))
+table(dt$parella)
+table(dt$sexe)
+```
+
+## Apartat 2
+Convertiu les puntuacions a escala de 0-10 i les mesures dels dits en centímetres.
+
+Les puntuacions de escala estan entre 0-100, per tant, dividint por 10;
+
+```{r}
+dt$punt_pare<-dt$punt_pare/10
+dt$punt_mare<-dt$punt_mare/10
+dt$punt_parella<-dt$punt_parella/10
+dt$sensacio_periode_covid<-dt$sensacio_periode_covid/10
+```
+
+Las mesures dels dits estan en milímetros i volem tindre-les en en centímetro, així;
+
+```{r}
+dt$polze<-dt$polze/10
+dt$index<-dt$index/10
+dt$mig<-dt$mig/10
+dt$anular<-dt$anular/10
+dt$menut<-dt$menut/10
+```
+
+## Apartat 3
+
+_Feu un corrplot per a les variables numèriques de la base de dades._
+
+Les correlacions només es fan amb les variables numériques;
+
+
+```{r}
+library(corrplot)
+var_num<-sapply(dt,is.numeric)
+dt_numer<-dt[,var_num]
+dt_numer$ID<-NULL
+correl<-cor(dt_numer,use = "pairwise.complete.obs")
+corrplot(correl)
+```
+
+
+## Apartat 4
+
+_Calculeu la matriu de correlacions dels dits de la mà. Quins dos es correlacionen més? Quins menys?_
+
+```{r}
+## names(dt)
+cor(dt[c("polze","index","mig","anular","menut")])
+
+```
+Els dits que presenten menys correlacions:
+
+```{r}
+corMatrix<-as.data.frame(cor(dt[c("polze",
+                                  "index",
+                                  "mig",
+                                  "anular",
+                                  "menut")]))
+min_value<-min(corMatrix)
+rownames(which(corMatrix == min_value, arr.ind = TRUE))
+```
+
+Els dits que presenten més correlacions:
+
+```{r}
+corMatrix<-as.data.frame(cor(dt[c("polze",
+                                  "index",
+                                  "mig",
+                                  "anular",
+                                  "menut")]))
+dif_1_corMatrix<-which(corMatrix != 1 & corMatrix != -1, arr.ind = TRUE)
+
+max_value <- max(corMatrix[dif_1_corMatrix])
+
+rownames(which(corMatrix == max_value, arr.ind = TRUE))
+```
+
+## Apartat 5
+
+_Calculeu la variable 2D:4D ratio dels dits. Feu-ne una descripció i calculeu els percentils 25%, 50% (mediana) i 75%. Feu un histograma de la variable._
+
+```{r}
+dt$ratio_2D4D<-dt$index/dt$anular
+summary(dt$ratio_2D4D)
+quantile(dt$ratio_2D4D,
+         probs =c(0.25,0.5,0.75) )
+hist(dt$ratio_2D4D)
+```
+
+## Apartat 6
+
+_Compareu els valors d’aquesta variables segons homes i dones._
+
+```{r}
+
+df_homes<-subset(dt,sexe=="Home")
+df_dones<-subset(dt,sexe=="Dona")
+t.test(df_homes$ratio_2D4D,
+       df_dones$ratio_2D4D)
+
+```
+
+Es pot veure que hi ha suficients evidències per acceptar la hipòtesi nul·la d'igualtat de mitjanes.
+
+## Apartat 7
+
+_Testeu la hipòtesi de l’article amb les dades de la mostra,correlacionant el seu valor amb les diferents puntuacions obtingudes._
+
+### Per homes
+
+**Correlació amb puntacions pare**
+```{r}
+cor.test(x=df_homes$ratio_2D4D,
+         y=df_homes$punt_pare)
+```
+
+**Correlació amb puntacions mare**
+```{r}
+cor.test(x=df_homes$ratio_2D4D,
+         y=df_homes$punt_mare)
+```
+
+**Correlació amb puntacions parella**
+```{r}
+cor.test(x=df_homes$ratio_2D4D,
+         y=df_homes$punt_parella)
+```
+
+
+### Per homes
+
+**Correlació amb puntacions pare**
+```{r}
+cor.test(x=df_dones$ratio_2D4D,
+         y=df_dones$punt_pare)
+```
+
+**Correlació amb puntacions mare**
+```{r}
+cor.test(x=df_dones$ratio_2D4D,
+         y=df_dones$punt_mare)
+```
+
+**Correlació amb puntacions parella**
+```{r}
+cor.test(x=df_dones$ratio_2D4D,
+         y=df_dones$punt_parella)
+```
+
+## Apartat 8
+
+_Ajusteu un model lineal amb les puntacions del pare i la mare. Quins són els paràmetres del model? Quin és el percentatge de variabilitat explicada?_
+
+Podem posar com varaible resposta les puntacions del pare o la mare i com variable explicativa les puntacions de la mare o pare, respectivament.
+
+
+```{r}
+fit<-lm(punt_mare~punt_pare,data=dt)
+summary(fit)
+```
+
+
+El percentatge de variabilitat explicada pel model:
+
+```{r}
+summary(fit)$adj.r.squared*100
+```
+
+## Apartat 9
+
+_Feu un diagòstic dels residus del model_
+
+```{r}
+par(mfrow=c(2,2))
+plot(fit)
+```
+S'observa que la mitjana dels errors oscila pròxima a 0.
+Les dades podrien semblar que presenten un comportament normal però les cues son molt pesades.
+La variància sembla cte. (homocedesticitat) ja que no entra en ninguna estructura de trompeta
+
+
+```{r}
+library(performance)
+library(see)
+par(mfrow=c(1,1))
+check_model(fit)
+```
+
+## Apartat 10
+
+_Quin percentatge d’alumnes es porta almenys amb un 7 amb els seus dos pares?_
+
+```{r}
+taula_contingencia<-table(dt$punt_mare>7,dt$punt_pare>7)
+prop.table(taula_contingencia)
+```
+
+El porcentaje de alumnos que tiene un 7 con los 2 padres es:
+```{r}
+prop.table(taula_contingencia)[2,2]*100
+```
+
+## Apartat 11
+
+_Feu una taula de contingència per saber el nombre de persones amb parella o sense segons el sexe. Qui dels dos té un percentatge de parelles superior?_
+
+```{r}
+taula_cont_parella_sexe<-table(dt$sexe,dt$parella)
+taula_cont_parella_sexe
+t_pareja<-prop.table(taula_cont_parella_sexe,1)
+t_pareja
+```
+
+El sexe que té més d'una parella:
+
+```{r}
+value_pareja<-max(t_pareja[,"si"])
+row.names(which(t_pareja==value_pareja,
+                arr.ind = TRUE))
+
+```
+
+## Apartat 12
+
+_Ajusteu un model de Regressió Logística per determinar la mateixa associació que en l’apartat anterior. Calculeu les probabilitats predites pel model i els intervals de confiança del 95% amb la llibreria emmeans._
+
+
+```{r}
+library(emmeans)
+model_1_RL<-glm(parella~sexe,
+    family = "binomial",
+    data=dt)
+model_1_RL
+emmeans(model_1_RL,
+        "sexe",
+        type="response")
+
+```
+
+
+## Apartat 13
+
+_Ajusteu el mateix model de l’apartat anterior però ara covariant segons la ratio dels dits. Torneu a calcular les probabilitats predites (ara ajustades o covariades). És significativa la variable ratio en el model? Mireu el VIF i digueu si us sembla un model acceptable._
+ 
+```{r}
+model_2_RL<-glm(parella~sexe+ratio_2D4D,
+                family = "binomial",
+                data=dt)
+emmeans(model_2_RL,
+        "sexe",
+        type="response")
+
+check_model(model_2_RL)
+
+```
+Observant que el VIF no es més gran que 5 en cap de les dues variables, per tant, no hi ha multicolinealitat entre les variables del model.
+
+## Apartat 14
+
+_Feu un model d’interacció per saber com es porten nois o noies amb cada pare. Feu una comparació 2 a 2. Què observeu?_
+
+**Pista:Per aquest apartat cal reestructurar (o pivotar) les dades com toca amb la llibreria tidyr. Per les comparacions cal buscar a la llibreria emmeans de nou.**
+
+
+```{r}
+library(tidyr)
+dt %>% 
+  dplyr::select("ID","sexe","punt_pare","punt_mare") %>%
+  pivot_longer(
+    cols = punt_pare:punt_mare,
+    names_to = "pares",
+    values_to = "puntuacio_pares")-> dades_reestruc_long
+head(dades_reestruc_long)
+```
+
+Com es pot observar, en la nova estructura, tenim la puntuació que ha donat cada individu per sa mare i son pare
+
+```{r}
+model_interacio<-lm(puntuacio_pares~sexe*pares,
+                    data=dades_reestruc_long)
+model_interacio
+
+interacio_m<-emmeans(model_interacio,
+         ~sexe*pares,
+        type="response")
+```
+
+En la funcion **emmeans**, en el apartat de formula introdueixes la part del model que vols calcular els intervals de confiança. Es a dir, podriem tindre molts més tipus de interaccions però només interessa les del *sexe* i *pares*
+
+
+```{r}
+interacio_m
+pairs(interacio_m)
+```
+
+# QÜESTIÓ 2: Introducció al Remostreig
+
+## Apartat 1
+
+_Feu un histograma de la variable alçada. Quin model paramètric us sembla correcte per aquest varaible? Obtingueu una remostra de mida 1000 d'aquest model i compareu els resultats amb els reals. Quin problema hi veieu? Quina solució pot tenir?_
+
+```{r}
+hist(dt$altura)
+```
+Encara que les dades no semblen molt normals podriem suposar que el model que segueixen és una normal. En efecte, podem veure si les dades s'ajuste a una normal fent el test de Shaphiro-Wilk;
+
+```{r}
+shapiro.test(dt$altura)
+```
+Aquest test assumeix com a hipòtesi nul·la normalitat de les dades, i.e, que les dades provenen d'una distribució normal. Com que el resultat del test és no significatiu, aixó suposa que no es pot rebutjar que les dades vinguin d'una normal. Aleshores, podriem sugerir com a distribució paramètrica la distribució normal. 
+
+Recordatori:
+
+Una prova/test no paramètric és una prova estadística que no fa suposicions de forma o dels paràmetres específics de la distribució subyacents. A diferència de les proves paramètriques, que requereixen suposicions de forma (ex. normalitat) i sobe la variància, les proves no paramètriques no les necesiten. Característiques de les proves paramètriques:
+
+  1. No requereix normalitat
+  2. No depen de paràmetres especifics
+  3. Robusteça: davant valos atípics i no es veu afectat per distribucions no normals
+
+Amb el test no paramètric (recorda que una proba no paramètrica) de Kolmogorov-Smirnov podrem veure si les nostres dades s'ajuste a una normal amb mitjana i variància mostrals.
+
+```{r}
+media<-  mean(dt$altura, na.rm = TRUE)
+desviacio <- sd(dt$altura, na.rm = TRUE)
+ks.test(dt$altura, "pnorm", mean = media , sd = desviacio)
+```
+El test compara la distribució acumulada empirica de les nostres dades amb la distribució acumulada d'una distribució normal especificada mitjaçant "pnorm". La hipòtesi nul·la és que les dades proven de la distribució teòrica donada.Així,segons el resultat del test, les nostres dades s'ajusten a la distribucií teòrica d'una N(`r media`,`r desviacio`).
+
+Davant aquesta situació, poden donar-se diferents casos mitjançant els quals podriem arribar a les mateixes conclusions. Per exemple, es pot donar el cas en que els valors de la mitjana i la media siguin semblants als ací introduits i el test de Kolmogorov-Smirnov done un resultat aproximat als aquí presentats. Per una altra banda, es podria haver escollit un altre model que no fora el gaussià i els resultats podrien ser similars. 
+
+Ara passarem a obtindre un remostra del model proposat.
+
+```{r}
+n<-100
+dt.model <- rnorm(n,mean = media, sd = desviacio)
+
+par(mfrow=c(1,2))
+hist(dt$altura,main="Data Original")
+hist(dt.model,main="Data model")
+```
+
+Els dos gràfics tenen certes discrepàncies. El gràfic de la dreta, com que s'ha simulat mitjançant una normal, té forma de normal però el gràfic de l'esquerra, encara que les seues dades s'ajusten a una distribució normal, tal i com indica el test de Shapiro-Wiclh, no sembla que ho siguen. Aleshores, caldria pensar en si existeix una altra variable que ens permitisca estratificar en diferents grups (com passa amb la variable sexe, en els homes i les dones la seua alçada NO es distribueix de la mateixa manera, ern mitjana els homes son més alts que les dones, aixó ho podem veure en el següent boxplot);
+
+
+```{r}
+boxplot(altura~sexe, data=dt)
+```
+En consideració, caldria fer dos models diferents per modelitzar l'altura, un pels homes i un altre per les dones. Per donar més evidència a aquest fet, es pot gràficar conjuntament el histograma de l'altura per als homes i per les dones i veure'm (segons les suposicions que estem tenint en compte) que presenten un especie de collada;
+
+```{r}
+hist(df_homes$altura,
+     freq=FALSE,
+     col = rgb(0, 0, 1, 0.5), # Para que sea transparente
+     main="Homes vs Dones",
+     ylim = c(0,0.1),
+     xlim = c(min(dt$altura, na.rm = TRUE), max(dt$altura, na.rm = TRUE)))
+
+lines(density(df_homes$altura), col = "blue", lwd = 2)
+
+hist(df_dones$altura,
+     freq=FALSE,
+     col = rgb(1, 0, 0, 0.5), 
+     xlim = c(min(c(df_homes$altura, df_dones$altura)), max(c(df_homes$altura, df_dones$altura))),
+     add=TRUE)
+
+lines(density(df_dones$altura), col = "red", lwd = 2)
+legend("topright", legend = c("Homes", "Dones"), fill = c(rgb(0, 0, 1, 0.5), rgb(1, 0, 0, 0.5)), border = NA)
+```
+Tal i com s'ha mencionat, es pot observa aquesta collada que es dona quan en realitat la distribució altura ocultava per sexe dues distribucions que no es poden analitzar conjuntament. Per tant, s'hauria de fer un model normal per cadascuna d'aquestes distribucions. En efecte, podem veure si es comporte de forma normal com s'ha fet abans;
+
+```{r}
+shapiro.test(df_homes$altura)
+shapiro.test(df_dones$altura)
+```
+En els dos cas, no hi ha sufients evidències per rebutjar l'hipòtesi nul·la de normalitat. En conseqüència, es pot veure si el comportament de les dades s'ajusta a un model teòric gaussià amb mitjana i desviacions mostrals, respectivament.
+
+```{r}
+ks.test(df_homes$altura, "pnorm", mean = mean(df_homes$altura) , sd = sd(df_homes$altura))
+ks.test(df_dones$altura, "pnorm", mean = mean(df_dones$altura) , sd = sd(df_dones$altura))
+```
+En els dos casos, els models teòrics s'ajusten bé a les dades. I per tant, podriem assignar com una possible distribució teòric de les altures dels individus per sexes, la distribució guassiana amb mitjana i desviació mostrals, respectivament.
+
+
+# Apartat 2
+
+_Definiu una estratègia de remostreig per modelar si una persona té parella o no segons els valors observats de la mostra de classe._
+
+
+Suposant que aquesta apartat dos és equivalent al apartat anterior de la qüestió 2
+
+```{r}
+head(dt)
+plot(dt$parella)
+x_mostral <- table(dt$parella)["si"] # numero de persones amb parella en la nostra mostra
+pi_mostral <- prop.table(table(dt$parella))["si"] #valor mostral de la proporció de persones amb parella
+print(pi_mostral)
+```
+
+Aleshores definirem la tècnica de remostreig més coneguda: _Boostrap_. Aquesta tècnica es basa en la generació de multpiles mostres del mateix tamany de la base original, però amb reposició. En cada iteració, es calcularà la proporció de persones que tenen parella. Repetint aquest procés per cadascuna de les multiples mostres generades amb el mètode Boostrap, s'obté la distrució de la estadística d'interés.
+
+```{r}
+# genera una mostra del mateix tamany que data pero amb reemplaçament (BOOSTRAING)
+submostra <- function(data, replacement=TRUE){
+  subdata <- data[sample(nrow(data), size=nrow(data), replace=replacement),]
+  return(subdata)
+}
+
+#calcula de proporció de persones amb parella (una funció més genèrica)
+propor <- function(data,variable, valor){
+  proporcio <- prop.table(table(data[variable]))[valor]
+  absolut <- table(data[variable])[valor]
+  return(c(proporcio,round(absolut)))
+}
+
+n<-5000
+v.prop <- replicate(n, propor(submostra(dt),"parella","si"))
+
+v.prop<-t(v.prop)
+colnames(v.prop) <- c("pi","x")
+
+v.prop <- data.frame(v.prop)
+
+shapiro.test(v.prop$pi) #no accepta la hipòtesi de normalitat
+shapiro.test(v.prop$x) 
+
+pi_mostral <- mean(v.prop$pi)
+mean.pisim <- mean(v.prop$x); 
+data.frame(valor_mostral=pi_mostral, valor_simulat=mean.pisim)
+```
+
+El que s'ha fet en el codi anterior és utilitzar la tècnica de remostreig de Boostrap per la generació de submostres. En cadascuna d'aquestes mostres s'ha obtingut dues estimacions puntuals: el nombre de individus en parella (dins de 59 de la mostra) i la proporció de individus que tenen parella. Aleshores, tenim un registre de tots els nombres i proporcions en cadascuna de les submostres generedades. 
+
+Es clar que, la variable nombre d'individus té una distribució Binomial amb paràmetre fixat $n=59$ perque és la mida mostral de la base de dades i el paràmetre a estimar és la proporció d'acceptació.
+
+```{r}
+par(mfrow=c(1,2))
+hist(v.prop$pi, freq = FALSE, main="Valors pi en boostrap")
+hist(v.prop$x, freq=FALSE, main="Valors x en boostrap")
+
+```
+
+Es pot observa que els dos valors son prou semblant i, per conseqüència, aquest valor simulat (podem prendre'l com estimació no-esbiaxada d'una proporció) ens pot servir per fer una simulació amb una distribució binomial de la variable nombre de parelles de la nostra mostra.
+
+A continuació, utilitzant aquest 
+
+```{r}
+m<-10000
+algo <- replicate(m, sum(rbinom(n=nrow(dt), size=1, prob = mean(v.prop$pi))))
+hist(algo)
+quantile(algo,probs = c(0.025, 0.975))
+mean(algo)
+```
+
+
+## Apartat c
+
+_Definiu un model multivariant per les mesures dels dits de les mans i obtingueu 1000 remostres segons el model definit_
+
+Podriamos definir el modelo multivariante mediante una normal multivariatne donde el vector de medias sera las medias de cada dedo y la matriz de varianzas-covarianzas sera la matriz de correlaciones de los dedos.
+
+```{r}
+if (!requireNamespace("mvtnorm", quietly = TRUE)) {
+  install.packages("mvtnorm")
+}
+library(mvtnorm)
+
+corMatrix## Matriz de correlaciones de los dedos
+
+interes<-c("polze","index","mig","anular","menut")
+media_dedos<-sapply(dt[,interes],mean)
+muestra_dedos<-rmvnorm(n = 1000, 
+                       mean = media_dedos,
+                       sigma = as.matrix(corMatrix))
+colnames(muestra_dedos)<-interes
+head(muestra_dedos)
+```
+
+## Apartat d
+
+_Obtingueu una remostra mitjaçant mostreig per reeplaçament de les dades dels dits._
+
+Reutilitzarem la funció calculada abans anomenada **submostra** que generauna submostra amb reemplaçament d'uns base de dades de ma mateix mida, mètode de boostraping.
+
+```{r}
+subdits <- submostra(dt %>% dplyr::select(interes))
+head(subdits)
+```
+
+
+

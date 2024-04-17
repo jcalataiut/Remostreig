@@ -1,0 +1,247 @@
+---
+title: "Practica_1"
+author: "Jose Calatayud Mateu"
+date: "2024-02-23"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+library(ggplot2)
+```
+
+## Pràctica 1
+
+_Monte Carlo methods in the most basic form is used to approximate to a result aggregating repeated probabilistic experiments. For instance, to find the true probability of heads in a coin toss repeat the coin toss enough (e.g. 100 times) and calculate the probability by dividing number of heads to the total number of experiments._
+
+_Do a function to simulate this experiment and return this simulation with (C, +). The number of tosses and the probabilities must be a parameters. The function must return a list with:_
+
+  1.The simulated sequence.
+  2.The empirical probabilities for tails and crosses.
+  3.A ggplot2 plot with the empirical results for the accumuled empirical values
+
+
+```{r}
+#Valors 1=C i 0=X
+
+simulacio <- function(n,p){
+
+  sequen <- sample(c(0,1), size=n, replace = TRUE, prob = c(1-p,p))
+  prob_C <- sum(sequen==1)/n
+  prob_X <- sum(sequen==0)/n
+  t<-seq_len(n)
+  acum <- cumsum(sequen)/t
+  
+  df <- data.frame(x = t, y = acum)
+
+  plotseq <- ggplot(df, aes(x = x, y = y)) +
+    geom_line()+
+    ylim(0,1)+
+    geom_hline(yintercept = p, linetype="dashed", color="red")
+  
+  return(list(factor(sequen,levels=c(0,1), labels=c("+","C")), prob_C, prob_X, plotseq))
+}
+
+sim <- simulacio(1000,0.5)
+
+sim[[1]]
+```
+### Questió 2
+
+*The anniversary problem is a famous problem of probability and statistics. The purpose of this problem is to determine the probability that there is a group of n people that at least two coincide on the date of birth.*
+
+  1. If we assume that births do not occur with the same probability every day of the year. The chances of finding people with the same day of birth would be higher or lower? Justify the answer.
+  
+La probabilitat de trobar coincidència seria major que tots presentin mateixa probabilitat del seu aniversari, quan la probabilitat es la mateixa per tots els dies, és el cas de màxima dispersió. Per això, en la resta de casos, per un mateix grup, si la probabilitat no està equitativament distribuida la probablitat de que hi hagui almenys dues coincidències és major.
+
+  2. Calculate this probability if each day is more likely than the previous day linearly (with probabilities between 0 to 1).Compose this probabilities in the same graph.
+
+```{r}
+t<-1:365
+vector_prob<-t/sum(t)
+
+# n: numero de persones del grup
+
+sim_cumple_equitativa <- function(rep,n){
+  t<-1:365
+  mostra <- apply(t(replicate(rep,sample(t, size=n, replace = TRUE, prob = rep(1/365,365)))),MARGIN=1,FUN=function(x) {length(unique(x))!=n})
+  prob<- sum(mostra)/rep
+  return(prob)
+}
+
+sim_cumple_lineal <- function(rep,n){
+  t<-1:365
+  vector_prob<-t/sum(t)
+  mostra <- apply(t(replicate(rep,sample(t, size=n, replace = TRUE, prob = vector_prob))),MARGIN=1,FUN=function(x) {length(unique(x))!=n})
+  
+  prob<- sum(mostra)/rep
+  return(prob)
+}
+
+
+rep <- 10000
+m<-100
+y_equi <- apply(as.data.frame(1:m), 1,FUN= function(x){sim_cumple_equitativa(rep,x)})
+y_lin <- apply(as.data.frame(1:m), 1,FUN= function(x){sim_cumple_lineal(rep,x)})
+
+plot(1:m, y_equi, type = "l", col="blue")
+par(new=T)
+plot(1:m, y_lin, type="l", col="red", axes=FALSE, ylab = NA, xlab = NA)
+legend(x=80,y=0.3,legend = c("uniforme","lineal"), col=c("blue","red"), lty=1)
+
+```
+Com es pot veure el en gràfic, tal i com s'havia anunciat al començament de la qüestió, la probabilitat de trobar coincidència és major en el cas de distribució de probabilitat lineal que no en la uniforme.
+
+  3. Compute the diference for this two probabilities and plot it. In which n de diference in maximum? Which is this computed probability?
+  
+```{r}
+dif <- abs(y_equi-y_lin)
+plot(dif, type = "l")
+
+n<-which(dif==max(dif)); 
+cat("La diferència màxim s'obté quan el número de persones del grup és", n)
+lin.eq <- data.frame(uniforme=c(y_equi[n]),lineal=c(y_lin[n])); lin.eq
+
+```
+
+
+
+### Question 3
+
+```{r}
+f <- function(x){((sin(10*x^2))^2)*cos(x)*x^{pi/2}}
+curve(f(x), ylim=c(0,1), main="Plot funció a integrar")
+
+
+montecarlo_integral <- function(limits_integral, f, rep, epsilon=0.1){
+  rep<-10000
+  #trobar màxim amb simulacio
+  limits_integral<-c(0,1)
+  sequen<-seq(limits_integral[1],limits_integral[2], by=0.001)
+  epsilon<-0.1
+  maxim <- max(f(sequen))+epsilon
+  
+  x<-runif(rep,min=limits_integral[1],max=limits_integral[2])
+  y<-runif(rep,min=0, max=maxim)
+  factor_cor <- (limits_integral[2]-limits_integral[1])*maxim
+  area <- length(y[(y<=f(x))])/rep*factor_cor
+  
+  dt<- data.frame(x,y)
+  p<-ggplot(dt, aes(x=x,y=y))+
+    geom_point(aes(colour= y<=f(x)), show.legend = FALSE)+
+    xlim(c(limits_integral[1],limits_integral[2]))+
+    ylim(c(0,maxim))+
+    geom_function(fun=f,colour="black",linetype=1)
+  
+  return(list(area,p))
+}
+
+montecarlo_integral(c(0,1),f,10000)[[1]]
+montecarlo_integral(c(0,1),f,10000)[[2]]
+```
+
+### Qüestió 4
+
+  1. Proveu analíticament que $E(X_n)=n(p-q)$ i que $V(X_n)=4npq. Calculeu quina és la distribució assiptòtica del procrés segons el Teorema Central del Límit.$
+
+Si n=0, $E(X_n)=E(0)=0$ i la identitat es verifica trivialment. Ara suposem que $n>0$,
+
+$$
+E(X_n)=E( \sum_{i=1}^n Y_i )= \sum_{i=1}^n E(Y_i) = n \cdot (p-q)
+$$
+la segon igualtat es dedueix del fet que les variables dicotómiques $Y_i$ estan iid. Endemés, s'ha tingut en compte que $E(Y_i)=1 \cdot p + (-1) \cdot q = p-q$
+
+Aleshores, $\forall n$ amb $n>0$ es verifica que $E(X_n)=n\cdot(p-q)$. Per que respecta a la variància, s'utilitzarà el fet que $V(Y_n)=E(Y_n^2)-E(Y_n)^2$ i que $E(Y_n^2)=1^2 \cdot p + (-1)^2 \cdot q = p+q$. Per tant, $V(Y_n)=(p+q)-(p-q)^2$ en efecte, de la mateix forma que en el càlcul anterior, per $n=0$ els resultat es verifica trivialment i suposant $n>0$ es té:
+  
+$$
+V(X_n)=V( \sum_{i=1}^n Y_i )= \sum_{i=1}^n V(Y_i) = \sum_{i=1}^n [ E(Y_n^2)-E(Y_n)^2]= \sum_{i=1}^n (p+q)-(p-q)^2 = \\ 
+= n(p+q)-n(p-q)^2 = n(p+1-p) - n (p-(1-p))^2=n-n(2p-1)^2 = n - n(4p^2+1-4p) = \\
+= n - 4np^2 - n + 4np = 4np(1-p) = 4npq
+$$
+Recordarem el resultat del Teorema Central del Límit:
+
+Si $X_1, X_2,..., X_n$ son variables aleatories iid amb esperança $\mu=E(X_i)$ i variància $\sigma^2=V(X_i)$ $\forall i=1,2,...,n$ es verifica que la variable suma $Y=X_1+X_2+...+X_n$ (quan $n \rightarrow \infty$) es pot aproximar per una distribució normal amb esperança suma de esperances i variància com suma dd variàncies. És a dir;
+
+$$
+Y=X_1+X_2+...+X_n \sim N\left(\sum_{i=1}^n \mu_i, \sqrt{\sum_{i=1}^n \sigma_i^2}\right)
+$$
+
+En conclusió, el TCL afirma que si la v.a. X és la suma d'una gran quantitat de variables aleatòria iid, aleshores X es distribueix aproximadament normal.
+
+Per tant, aplicant aquest resultat al nostre cas, $X_n \sim N\left(n(p-q), 4npq \right)$.
+
+
+  2. Simuleu una mostra {X1000} d’aquest procés i feu un gràfic dels valors obtinguts on les abscisses siguin els valors de n i les ordenades els valors {Xn}. Preneu p = 0.5.
+
+```{r}
+#Simulació
+
+sim_rw<- function(n,p){
+  Y_i <- sample(c(1,-1), n, prob = c(p,1-p), replace = TRUE)
+  X_n <- cumsum(Y_i)
+  
+  return(X_n)
+}
+
+s<-sim_rw(1000,0.5)
+
+dt <- data.frame(x=seq_len(1000),y=s)
+p<-ggplot(dt, aes(x = x, y = y)) +
+    geom_line()
+p
+
+
+```
+
+  3. Penseu/descriviu com aplicar el mètode de Montecarlo per a calcular probabilitats.
+  
+El mètodo de Montecarlo es una tècnica estadística i computacional que utilitza números aleatoris per a  realitzar simulacions i aproximacions numéricas de problemes matemàtics. 
+
+El mètodo de Montecarlo s'utilitza para estimar probabilitats i valors esperats mitjançant la generació de números aleatoris que sigueixen una distribución específica. La idea principal es realitzar múltiples simulacions i promigar els resultados per a obtindre una estimació més precisa.
+
+En el notre cas, consistirà en simular resultats de sucessions de variables aleatories dicotòmiques iid amb probabilitat d'èxit $p$. A partir dels resultats de cada una d'aquestes successió obtindrem noves successions acumulatives $X_n$ de les quals amb els seus resultats calcularem probabilitat de la forma freqüèntista com la defició de Laplace: "casos possibles/casos totals".
+
+  
+  4. Calculeu empíricament quina és la probabilitat del següent succés d'aquest procés estocàstic $P([X_1000<75])$
+  
+```{r}
+rep<-10000
+n<-1000
+p<-0.55
+
+probabilitat <- function(n,p,rep,tipo, valor){
+  if(tipo=="menor"){
+    fre <- sum(apply(matrix(replicate(rep,sim_rw(n,p)[n]), ncol=1),MARGIN=1,FUN=function(x) {x<valor}))
+    return(fre/rep)
+  }
+  
+  if(tipo=="major"){
+    fre <- sum(apply(matrix(replicate(rep,sim_rw(n,p)[n]), ncol=1),MARGIN=1,FUN=function(x) {x>valor}))
+    return(fre/rep)
+  }
+}
+
+p75<-probabilitat(n,p,rep, tipo="menor", valor = 75)
+cat("La probabilitat de que X_n>75 és", p75)
+```
+  
+  5. Calculeu ara la probabilitat del següent succés d’aquest procés estocàstic $P([X_{12} < 7 \wedge X_{534} > 127 \wedge X_{1000} < 363])$ suposant que $p = 2/\pi$.
+  
+```{r}
+rep<-1000000
+n<-1000
+vector <- c(12,534,1000)
+p<-2/pi
+fre <- sum(apply(t(replicate(rep,sim_rw(n,p)[vector])),MARGIN=1,FUN=function(x) {x[1]<7 & x[2]>127 & x[3]<363}))
+  
+cat("La probablitat de que X_12<7 i X_534>127 i X_1000<363 és", fre/rep)
+```
+
+
+
+
+

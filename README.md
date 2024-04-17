@@ -8,6 +8,8 @@ El present document inclourà documents relatives als temes abans comentats orga
   - Pràctica 2: Aplicació de Permutations test
   - Practica 3: Aplicació tècnica Jackknife
   - Practica 4: Aplicació tècnica Bootstrapping parametric i non-parametric
-
+  - Pràctica 5: Aplicació de Ensembled methods
+  - Entrega Remostreig: inclou un demostració conjunta en dos problemes de tots els possible aplicacions d'aquestes tècniques
+    
 Totes les dades s'obtenen de la carpeta files que trobareu en el repositori.
 
